@@ -53,5 +53,11 @@
         "compile": "Compiles WP SQlite DB classes together into dist/compiled.php",
         "generate-dropin": "Generates the db.php dropin file from compiled classes and other partials into dist/db.php",
         "test": "Runs PHPUnit tests"
+    },
+    "config": {
+        "allow-plugins": {
+            "composer/installers": true,
+            "roots/wordpress-core-installer": true
+        }
     }
 }

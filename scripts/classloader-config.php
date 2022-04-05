@@ -15,13 +15,14 @@ $config->addExclusiveFilter('#/wordpress/#');
 // Based on ClassLoader::getIncludes.
 $loader = new ClassLoader();
 call_user_func(function (ClassLoader $loader) {
-    require dirname(__DIR__) . '/vendor/autoload.php';
+    include dirname(__DIR__) . '/vendor/autoload.php';
     $loader->register();
     // Load files and classes in the order they should be written.
 
     // Load wpsqlitedb manually to avoid
     $loader->loadClass(wpsqlitedb::class);
     define('FQDB', '');
+    define('FQDBDIR', dirname(__DIR__) . '/tests/test-wp-content/');
     new PDOEngine();
     new PDOSQLiteDriver();
     new CreateQuery();
