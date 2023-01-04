@@ -156,7 +156,7 @@ class wpsqlitedb extends \wpdb
     if (is_multisite()) {
       $msg = "WordPress database error: [$str]\n{$this->last_query}\n";
       if (defined('ERRORLOGFILE')) {
-        error_log($msg, 3, ERRORLOGFILE);
+        error_log($msg, 3, \ERRORLOGFILE);
       }
       if (defined('DIEONDBERROR')) {
         wp_die($msg);
@@ -256,14 +256,14 @@ class wpsqlitedb extends \wpdb
 
     $this->last_query = $query;
 
-    if (defined('SAVEQUERIES') && SAVEQUERIES) {
+    if (defined('SAVEQUERIES') && \SAVEQUERIES) {
       $this->timer_start();
     }
 
     $this->result = $this->dbh->query($query);
     $this->num_queries++;
 
-    if (defined('SAVEQUERIES') && SAVEQUERIES) {
+    if (defined('SAVEQUERIES') && \SAVEQUERIES) {
       $this->queries[] = [$query, $this->timer_stop(), $this->get_caller()];
     }
 

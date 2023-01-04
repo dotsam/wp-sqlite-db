@@ -583,7 +583,7 @@ class AlterQuery
   /**
    * Variable to store the data definition table.
    *
-   * @var    associative array
+   * @var    array
    * @access private
    */
   private $array_types = [

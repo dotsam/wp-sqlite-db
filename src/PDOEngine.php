@@ -40,7 +40,7 @@ class PDOEngine extends PDO
   /**
    * Class variable to store the rewritten queries.
    *
-   * @var    array
+   * @var    string|array
    * @access private
    */
   private $rewritten_query;
@@ -241,7 +241,7 @@ class PDOEngine extends PDO
    */
   public function __destruct()
   {
-    if (defined('SQLITE_MEM_DEBUG') && SQLITE_MEM_DEBUG) {
+    if (defined('SQLITE_MEM_DEBUG') && \SQLITE_MEM_DEBUG) {
       $max = ini_get('memory_limit');
       if (is_null($max)) {
         $message = sprintf(
@@ -368,7 +368,7 @@ class PDOEngine extends PDO
 
     $this->queries[] = "Raw query:\n$statement";
     $res             = $this->determine_query_type($statement);
-    if (!$res && defined('PDO_DEBUG') && PDO_DEBUG) {
+    if (!$res && defined('PDO_DEBUG') && \PDO_DEBUG) {
       $bailoutString = sprintf(__(
           "<h1>Unknown query type</h1><p>Sorry, we cannot determine the type of query that is requested.</p><p>The query is %s</p>",
           'sqlite-integration'
@@ -446,7 +446,7 @@ class PDOEngine extends PDO
         break;
     }
 
-    if (defined('PDO_DEBUG') && PDO_DEBUG === true) {
+    if (defined('PDO_DEBUG') && \PDO_DEBUG === true) {
       file_put_contents(FQDBDIR . 'debug.txt', $this->get_debug_info(), FILE_APPEND);
     }
 
@@ -1463,7 +1463,7 @@ class PDOEngine extends PDO
    *
    * This is used for checking if SQLite can execute multiple rows insert.
    *
-   * @return version number string or 0
+   * @return string
    * @access private
    */
   private function get_sqlite_version()
