@@ -361,6 +361,7 @@ class PDOEngine extends PDO
    * @return mixed according to the query type
    * @see    PDO::query()
    */
+  #[\ReturnTypeWillChange]
   public function query($statement, $mode = PDO::ATTR_DEFAULT_FETCH_MODE, ...$fetch_mode_args)
   {
     $this->flush();
@@ -1484,19 +1485,16 @@ class PDOEngine extends PDO
    * @return boolean
    * @see    PDO::beginTransaction()
    */
+  #[\ReturnTypeWillChange]
   public function beginTransaction(): bool
   {
     if ($this->has_active_transaction) {
       return false;
-    } else {
-      try {
-        $this->has_active_transaction = $this->pdo->beginTransaction();
-      } catch (\Exception $e) {
-        $e;
-      }
-
-      return $this->has_active_transaction;
     }
+
+    $this->has_active_transaction = $this->pdo->beginTransaction();
+
+    return $this->has_active_transaction;
   }
 
   /**
@@ -1504,15 +1502,13 @@ class PDOEngine extends PDO
    *
    * @see PDO::commit()
    */
+  #[\ReturnTypeWillChange]
   public function commit(): bool
   {
-    if ($this->pdo->commit()) {
-      $this->has_active_transaction = false;
+    $isSuccess = $this->pdo->commit();
+    $this->has_active_transaction = false;
 
-      return true;
-    }
-
-    return false;
+    return $isSuccess;
   }
 
   /**
@@ -1520,14 +1516,12 @@ class PDOEngine extends PDO
    *
    * @see PDO::rollBack()
    */
+  #[\ReturnTypeWillChange]
   public function rollBack(): bool
   {
-    if ($this->pdo->rollBack()) {
-      $this->has_active_transaction = false;
+    $isSuccess = $this->pdo->rollBack();
+    $this->has_active_transaction = false;
 
-      return true;
-    }
-
-    return false;
+    return $isSuccess;
   }
 }
