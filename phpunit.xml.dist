@@ -9,7 +9,7 @@
     >
     <testsuites>
         <testsuite name="integration">
-            <directory suffix="Test.php">./tests/integration/</directory>
+            <directory suffix="SmokeTest.php">./tests/integration/</directory>
         </testsuite>
     </testsuites>
 
@@ -17,4 +17,3 @@
         <env name="WP_PHPUNIT__TESTS_CONFIG" value="tests/wp-config.php" />
     </php>
 </phpunit>
-
