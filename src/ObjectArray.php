@@ -9,23 +9,23 @@ namespace WP_SQLite_DB;
  */
 class ObjectArray
 {
-  public function __construct($data = null, &$node = null)
-  {
-    foreach ($data as $key => $value) {
-      if (is_array($value)) {
-        if (!$node) {
-          $node = &$this;
-        }
+    public function __construct($data = null, &$node = null)
+    {
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                if (!$node) {
+                    $node = &$this;
+                }
 
-        $node->$key = new \stdClass();
-        self::__construct($value, $node->$key);
-      } else {
-        if (!$node) {
-          $node = &$this;
-        }
+                $node->$key = new \stdClass();
+                self::__construct($value, $node->$key);
+            } else {
+                if (!$node) {
+                    $node = &$this;
+                }
 
-        $node->$key = $value;
-      }
+                $node->$key = $value;
+            }
+        }
     }
-  }
 }
