@@ -21,7 +21,7 @@
         },
         "classmap": [
             "src/WP_SQLite_DB__Main.php",
-            "./wordpress/wp-includes/wp-db.php"
+            "./wordpress/wp-includes/class-wpdb.php"
         ]
     },
     "autoload-dev": {
