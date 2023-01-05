@@ -313,14 +313,14 @@ class CreateQuery
         if ($results) {
             foreach ($results as $result) {
                 if ($result->name == $index_name) {
-                    $index_name = $index_name . "_" . rand(0, 50);
+                    $index_name = "{$index_name}_" . rand(0, 50);
                     break;
                 }
             }
         }
 
         $index_name            = str_replace(' ', '', $index_name);
-        $this->index_queries[] = "CREATE UNIQUE INDEX $index_name ON " . $this->table_name . $col_name;
+        $this->index_queries[] = "CREATE UNIQUE INDEX $index_name ON {$this->table_name}{$col_name}";
 
         return '';
     }
@@ -349,7 +349,14 @@ class CreateQuery
      */
     private function _rewrite_enum($matches)
     {
-        return $matches[1] . ' ' . $matches[2] . ' TEXT ' . $matches[4] . ' CHECK (' . $matches[2] . ' IN (' . $matches[3] . ')) ';
+        return sprintf(
+            '%s %s TEXT %s CHECK (%s IN (%s)) ',
+            $matches[1],
+            $matches[2],
+            $matches[4],
+            $matches[2],
+            $matches[3]
+        );
     }
 
     /**
@@ -405,12 +412,12 @@ class CreateQuery
             foreach ($results as $result) {
                 if ($result->name == $index_name) {
                     $r          = rand(0, 50);
-                    $index_name = $index_name . "_$r";
+                    $index_name = "{$index_name}_{$r}";
                     break;
                 }
             }
         }
-        $this->index_queries[] = 'CREATE INDEX ' . $index_name . ' ON ' . $this->table_name . $col_name;
+        $this->index_queries[] = "CREATE INDEX $index_name ON {$this->table_name}{$col_name}";
 
         return '';
     }

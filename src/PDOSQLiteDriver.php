@@ -233,8 +233,8 @@ class PDOSQLiteDriver
             $table_name = str_replace(["'", ';'], '', $matches[2]);
         }
 
-        $suffix = empty($table_name) ? '' : ' AND name LIKE ' . "'" . $table_name . "'";
-        $this->_query = "SELECT name FROM sqlite_master WHERE type='table'" . $suffix . ' ORDER BY name DESC';
+        $suffix = empty($table_name) ? '' : " AND name LIKE '$table_name'";
+        $this->_query = "SELECT name FROM sqlite_master WHERE type='table'{$suffix} ORDER BY name DESC";
     }
 
     /**
@@ -557,7 +557,6 @@ class PDOSQLiteDriver
 
         $unique_keys_for_cond  = [];
         $unique_keys_for_check = [];
-        $where_array = [];
         $pattern               = '/^\\s*INSERT\\s*INTO\\s*(\\w+)?\\s*(.*)\\s*ON\\s*DUPLICATE\\s*KEY\\s*UPDATE\\s*(.*)$/ims';
 
         if (preg_match($pattern, $this->_query, $match_0)) {
@@ -606,9 +605,9 @@ class PDOSQLiteDriver
                         for ($i = 0; $i < $counter; ++$i) {
                             $col = trim($unique_key_array[$i]);
                             if (isset($ins_data_assoc[$col]) && $i == $counter - 1) {
-                                $condition .= $col . '=' . $ins_data_assoc[$col] . ' OR ';
+                                $condition .= "{$col}={$ins_data_assoc[$col]} OR ";
                             } elseif (isset($ins_data_assoc[$col])) {
-                                $condition .= $col . '=' . $ins_data_assoc[$col] . ' AND ';
+                                $condition .= "{$col}={$ins_data_assoc[$col]} AND ";
                             } else {
                                 continue;
                             }
@@ -616,7 +615,7 @@ class PDOSQLiteDriver
                     } else {
                         $col = trim($unique_key);
                         if (isset($ins_data_assoc[$col])) {
-                            $condition .= $col . '=' . $ins_data_assoc[$col] . ' OR ';
+                            $condition .= "{$col}={$ins_data_assoc[$col]} OR ";
                         } else {
                             continue;
                         }
@@ -646,6 +645,7 @@ class PDOSQLiteDriver
                 }
                 $update_data = rtrim($update_data, ';');
                 $tmp_array   = explode(',', $update_data);
+
                 foreach ($tmp_array as $pair) {
                     list($col, $value) = explode('=', $pair);
                     $col                        = trim($col);
@@ -658,25 +658,28 @@ class PDOSQLiteDriver
                         $value = $ins_array_assoc[$col];
                     }
                 }
+
+                $where_array = [];
+                $update_strings = [];
+
                 foreach ($ins_array_assoc as $key => $val) {
                     if (in_array($key, $unique_keys_for_check)) {
-                        $where_array[] = $key . '=' . $val;
+                        $where_array[] = "{$key}={$val}";
                     }
                 }
 
-                $update_strings = '';
                 foreach ($update_array_assoc as $key => $val) {
                     if (in_array($key, $unique_keys_for_check)) {
-                        $where_array[] = $key . '=' . $val;
+                        $where_array[] = "{$key}={$val}";
                     } else {
-                        $update_strings .= $key . '=' . $val . ',';
+                        $update_strings[] =  "{$key}={$val}";
                     }
                 }
 
-                $update_strings = rtrim($update_strings, ',');
+                $update_strings = implode(', ', $update_strings);
                 $unique_where   = array_unique($where_array, SORT_REGULAR);
-                $where_string   = ' WHERE ' . implode(' AND ', $unique_where);
-                $update_query   = 'UPDATE ' . $table_name . ' SET ' . $update_strings . $where_string;
+                $where_string   = implode(' AND ', $unique_where);
+                $update_query   = "UPDATE $table_name SET $update_strings WHERE $where_string";
                 $this->_query   = $update_query;
             }
         }

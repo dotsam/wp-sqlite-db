@@ -515,7 +515,7 @@ class PDOSQLiteUDFS
     public function regexp($field, $pattern)
     {
         $pattern = str_replace('/', '\/', $pattern);
-        $pattern = "/" . $pattern . "/i";
+        $pattern = "/{$pattern}/i";
 
         return preg_match($pattern, $field);
     }

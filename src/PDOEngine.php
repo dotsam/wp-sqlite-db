@@ -687,7 +687,7 @@ class PDOEngine extends PDO
      */
     private function prepare_query()
     {
-        $this->queries[] = "Prepare:\n" . $this->prepared_query;
+        $this->queries[] = "Prepare:\n{$this->prepared_query}";
         $reason          = 0;
         $message         = '';
         $statement       = null;
@@ -834,7 +834,7 @@ class PDOEngine extends PDO
         }
 
         if (isset($query)) {
-            $this->queries[]      = "With Placeholders:\n" . $query;
+            $this->queries[]      = "With Placeholders:\n{$query}";
             $this->prepared_query = $query;
         }
     }
@@ -865,7 +865,7 @@ class PDOEngine extends PDO
         $key                         = ':param_' . $this->param_num++;
         $this->extracted_variables[] = $param;
 
-        return ' ' . $key . ' ';
+        return " $key ";
     }
 
     /**
@@ -950,7 +950,7 @@ class PDOEngine extends PDO
     {
         $engine                = $this->prepare_engine($this->query_type);
         $this->rewritten_query = $engine->rewrite_query($query, $this->query_type);
-        $this->queries[]       = "Rewritten:\n" . $this->rewritten_query;
+        $this->queries[]       = "Rewritten:\n{$this->rewritten_query}";
         $this->extract_variables();
         $statement = $this->prepare_query();
         $this->execute_query($statement);
@@ -995,9 +995,9 @@ class PDOEngine extends PDO
 
             foreach ($exploded_parts as $value) {
                 $suffix = (substr($value, -1, 1) === ')') ? '' : ')';
-                $query_string              = $query_prefix . ' ' . $value . $suffix;
+                $query_string              = "{$query_prefix} {$value}{$suffix}";
                 $this->rewritten_query     = $engine->rewrite_query($query_string, $this->query_type);
-                $this->queries[]           = "Rewritten:\n" . $this->rewritten_query;
+                $this->queries[]           = "Rewritten:\n{$this->rewritten_query}";
                 $this->extracted_variables = [];
                 $this->extract_variables();
 
@@ -1010,7 +1010,7 @@ class PDOEngine extends PDO
             }
         } else {
             $this->rewritten_query = $engine->rewrite_query($query, $this->query_type);
-            $this->queries[]       = "Rewritten:\n" . $this->rewritten_query;
+            $this->queries[]       = "Rewritten:\n{$this->rewritten_query}";
             $this->extract_variables();
             $statement = $this->prepare_query();
             $this->execute_query($statement);
@@ -1076,7 +1076,7 @@ class PDOEngine extends PDO
 
         try {
             foreach ($rewritten_query as $single_query) {
-                $this->queries[] = "Executing:\n" . $single_query;
+                $this->queries[] = "Executing:\n{$single_query}";
                 $single_query    = trim($single_query);
                 if (empty($single_query)) {
                     continue;
@@ -1120,7 +1120,7 @@ class PDOEngine extends PDO
 
         try {
             foreach ((array) $rewritten_query as $single_query) {
-                $this->queries[] = "Executing:\n" . $single_query;
+                $this->queries[] = "Executing:\n{$single_query}";
                 $single_query    = trim($single_query);
                 if (empty($single_query)) {
                     continue;

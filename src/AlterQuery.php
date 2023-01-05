@@ -166,11 +166,11 @@ class AlterQuery
                     if (in_array(strtolower($match_2), ['fulltext', 'constraint', 'foreign'])) {
                         break;
                     } elseif (stripos('column', $match_2) !== false) {
-                        $tokens['command']     = $match_1 . ' ' . $match_2;
+                        $tokens['command']     = "$match_1 $match_2";
                         $tokens['column_name'] = $match_3;
                         $tokens['column_def']  = trim($the_rest);
                     } elseif (stripos('primary', $match_2) !== false) {
-                        $tokens['command']     = $match_1 . ' ' . $match_2 . ' ' . $match_3;
+                        $tokens['command']     = "$match_1 $match_2 $match_3";
                         $tokens['column_name'] = $the_rest;
                     } elseif (stripos('unique', $match_2) !== false) {
                         list($index_name, $col_name) = preg_split(
@@ -180,11 +180,11 @@ class AlterQuery
                             PREG_SPLIT_DELIM_CAPTURE
                         );
                         $tokens['unique']      = true;
-                        $tokens['command']     = $match_1 . ' ' . $match_3;
+                        $tokens['command']     = "$match_1 $match_3";
                         $tokens['index_name']  = trim($index_name);
                         $tokens['column_name'] = '(' . trim($col_name) . ')';
                     } elseif (in_array(strtolower($match_2), ['index', 'key'])) {
-                        $tokens['command'] = $match_1 . ' ' . $match_2;
+                        $tokens['command'] = "$match_1 $match_2";
                         if ($match_3 === '') {
                             $tokens['index_name'] = str_replace(['(', ')'], '', $the_rest);
                         } else {
@@ -192,43 +192,43 @@ class AlterQuery
                         }
                         $tokens['column_name'] = trim($the_rest);
                     } else {
-                        $tokens['command']     = $match_1 . ' COLUMN';
+                        $tokens['command']     = "$match_1 COLUMN";
                         $tokens['column_name'] = $match_2;
-                        $tokens['column_def']  = $match_3 . ' ' . $the_rest;
+                        $tokens['column_def']  = "$match_3 $the_rest";
                     }
                     break;
                 case 'drop':
                     if (stripos('column', $match_2) !== false) {
-                        $tokens['command']     = $match_1 . ' ' . $match_2;
+                        $tokens['command']     = "$match_1 $match_2";
                         $tokens['column_name'] = trim($match_3);
                     } elseif (stripos('primary', $match_2) !== false) {
-                        $tokens['command'] = $match_1 . ' ' . $match_2 . ' ' . $match_3;
+                        $tokens['command'] = "$match_1 $match_2 $match_3";
                     } elseif (in_array(strtolower($match_2), ['index', 'key'])) {
-                        $tokens['command']    = $match_1 . ' ' . $match_2;
+                        $tokens['command']    = "$match_1 $match_2";
                         $tokens['index_name'] = $match_3;
                     } elseif (stripos('primary', $match_2) !== false) {
-                        $tokens['command'] = $match_1 . ' ' . $match_2 . ' ' . $match_3;
+                        $tokens['command'] = "$match_1 $match_2 $match_3";
                     } else {
-                        $tokens['command']     = $match_1 . ' COLUMN';
+                        $tokens['command']     = "$match_1 COLUMN";
                         $tokens['column_name'] = $match_2;
                     }
                     break;
                 case 'rename':
                     if (stripos('to', $match_2) !== false) {
-                        $tokens['command']     = $match_1 . ' ' . $match_2;
+                        $tokens['command']     = "$match_1 $match_2";
                         $tokens['column_name'] = $match_3;
                     } else {
-                        $tokens['command']     = $match_1 . ' TO';
+                        $tokens['command']     = "$match_1 TO";
                         $tokens['column_name'] = $match_2;
                     }
                     break;
                 case 'modify':
                     if (stripos('column', $match_2) !== false) {
-                        $tokens['command']     = $match_1 . ' ' . $match_2;
+                        $tokens['command']     = "$match_1 $match_2";
                         $tokens['column_name'] = $match_3;
                         $tokens['column_def']  = trim($the_rest);
                     } else {
-                        $tokens['command']     = $match_1 . ' COLUMN';
+                        $tokens['command']     = "$match_1 COLUMN";
                         $tokens['column_name'] = $match_2;
                         $tokens['column_def']  = $match_3 . ' ' . trim($the_rest);
                     }
@@ -236,7 +236,7 @@ class AlterQuery
                 case 'change':
                     $the_rest = trim($the_rest);
                     if (stripos('column', $match_2) !== false) {
-                        $tokens['command']    = $match_1 . ' ' . $match_2;
+                        $tokens['command']    = "$match_1 $match_2";
                         $tokens['old_column'] = $match_3;
                         list($new_col) = explode(' ', $the_rest);
                         $tmp_col = preg_replace('/\(.+?\)/im', '', $new_col);
@@ -248,11 +248,11 @@ class AlterQuery
                             $tokens['column_def'] = trim($col_def);
                         }
                     } else {
-                        $tokens['command']    = $match_1 . ' column';
+                        $tokens['command']    = "$match_1 COLUMN";
                         $tokens['old_column'] = $match_2;
                         $tmp_col              = preg_replace('/\(.+?\)/im', '', $match_3);
                         if (array_key_exists(strtolower($tmp_col), $this->array_types)) {
-                            $tokens['column_def'] = $match_3 . ' ' . $the_rest;
+                            $tokens['column_def'] = "$match_3 $the_rest";
                         } else {
                             $tokens['new_column'] = $match_3;
                             $tokens['column_def'] = $the_rest;
@@ -261,7 +261,7 @@ class AlterQuery
                     break;
                 case 'alter':
                     if (stripos('column', $match_2) !== false) {
-                        $tokens['command']     = $match_1 . ' ' . $match_2;
+                        $tokens['command']     = "$match_1 $match_2";
                         $tokens['column_name'] = $match_3;
                         list($set_or_drop) = explode(' ', $the_rest);
                         if (stripos('set', $set_or_drop) !== false) {
@@ -272,7 +272,7 @@ class AlterQuery
                             $tokens['default_command'] = 'DROP DEFAULT';
                         }
                     } else {
-                        $tokens['command']     = $match_1 . ' COLUMN';
+                        $tokens['command']     = "$match_1 COLUMN";
                         $tokens['column_name'] = $match_2;
                         if (stripos('set', $match_3) !== false) {
                             $tokens['default_command'] = 'SET DEFAULT';
@@ -332,7 +332,7 @@ class AlterQuery
     {
         $tokenized_query = $queries;
         $tbl_name        = $tokenized_query['table_name'];
-        $temp_table      = 'temp_' . $tokenized_query['table_name'];
+        $temp_table      = "temp_{$tokenized_query['table_name']}";
 
         $query_obj = (new wpsqlitedb())->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='$tbl_name'");
 
@@ -371,7 +371,7 @@ class AlterQuery
     private function handle_drop_primary_key($queries)
     {
         $tokenized_query = $queries;
-        $temp_table      = 'temp_' . $tokenized_query['table_name'];
+        $temp_table      = "temp_{$tokenized_query['table_name']}";
 
         $query_obj = (new wpsqlitedb())->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
 
@@ -417,7 +417,7 @@ class AlterQuery
     private function handle_modify_command($queries)
     {
         $tokenized_query = $queries;
-        $temp_table      = 'temp_' . $tokenized_query['table_name'];
+        $temp_table      = "temp_{$tokenized_query['table_name']}";
         $column_def      = $this->convert_field_types($tokenized_query['column_name'], $tokenized_query['column_def']);
 
         $query_obj = (new wpsqlitedb())->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
@@ -476,9 +476,9 @@ class AlterQuery
     private function handle_change_command($queries)
     {
         $col_check       = false;
-        $old_fields      = '';
+        $old_fields      = [];
         $tokenized_query = $queries;
-        $temp_table      = 'temp_' . $tokenized_query['table_name'];
+        $temp_table      = "temp_{$tokenized_query['table_name']}";
 
         $column_name = isset($tokenized_query['new_column']) ? $tokenized_query['new_column'] : $tokenized_query['old_column'];
 
@@ -491,14 +491,14 @@ class AlterQuery
                 $col_check = true;
             }
 
-            $old_fields .= $col->Field . ',';
+            $old_fields[] = $col->Field;
         }
 
         if ($col_check == false) {
             return 'SELECT 1=1';
         }
 
-        $old_fields = rtrim($old_fields, ',');
+        $old_fields = implode(', ', $old_fields);
         $new_fields = str_ireplace($tokenized_query['old_column'], $column_name, $old_fields);
         $query_obj  = (new wpsqlitedb())->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
 
@@ -559,12 +559,12 @@ class AlterQuery
     private function handle_alter_command($queries)
     {
         $tokenized_query = $queries;
-        $temp_table      = 'temp_' . $tokenized_query['table_name'];
+        $temp_table      = "temp_{$tokenized_query['table_name']}";
         $def_value = null;
 
         if (isset($tokenized_query['default_value'])) {
             $def_value = $this->convert_field_types($tokenized_query['column_name'], $tokenized_query['default_value']);
-            $def_value = 'DEFAULT ' . $def_value;
+            $def_value = "DEFAULT $def_value";
         }
 
         $query_obj = (new wpsqlitedb())->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
@@ -592,7 +592,7 @@ class AlterQuery
             $old_default     = trim($match[3]);
             $pattern         = "/$col_name\\s*$col_def_esc\\s*$old_default/im";
 
-            $replacement = is_null($def_value) ? $col_name . ' ' . $checked_col_def : $col_name . ' ' . $checked_col_def . ' ' . $def_value;
+            $replacement = is_null($def_value) ? "$col_name $checked_col_def" : "$col_name $checked_col_def $def_value";
 
             $create_query = preg_replace($pattern, $replacement, $create_query);
             $create_query = str_ireplace($tokenized_query['table_name'], $temp_table, $create_query);
@@ -603,7 +603,7 @@ class AlterQuery
             $checked_col_def = $this->convert_field_types($col_name, $col_def);
             $pattern         = "/$col_name\\s*$col_def_esc/im";
 
-            $replacement = is_null($def_value) ? $col_name . ' ' . $checked_col_def : $col_name . ' ' . $checked_col_def . ' ' . $def_value;
+            $replacement = is_null($def_value) ? "$col_name $checked_col_def" : "$col_name $checked_col_def $def_value";
 
             $create_query = preg_replace($pattern, $replacement, $create_query);
             $create_query = str_ireplace($tokenized_query['table_name'], $temp_table, $create_query);
@@ -656,7 +656,12 @@ class AlterQuery
         // colDef is enum
         $pattern_enum = '/enum\((.*?)\)([^,\)]*)/ims';
         if (preg_match($pattern_enum, $col_def, $matches)) {
-            $def_string = 'TEXT' . $matches[2] . ' CHECK (' . $col_name . ' IN (' . $matches[1] . '))';
+            $def_string = sprintf(
+                'TEXT%s CHECK (%s IN (%s))',
+                $matches[2],
+                $col_name,
+                $matches[1]
+            );
         }
 
         return $def_string;
