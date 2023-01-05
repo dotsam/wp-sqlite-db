@@ -2,6 +2,8 @@
 
 namespace WP_SQLite_DB;
 
+use PDO;
+
 // phpcs:disable Squiz.Classes.ValidClassName.NotCamelCaps
 // phpcs:disable PSR1.Methods.CamelCapsMethodName.NotCamelCaps
 
@@ -409,6 +411,6 @@ class wpsqlitedb extends \wpdb
        */
       public function db_server_info()
       {
-          return 'SQLite3-' . $this->dbh->getAttribute(\PDO::ATTR_SERVER_VERSION);
+          return 'SQLite3-' . (new PDO('sqlite::memory:'))->getAttribute(\PDO::ATTR_SERVER_VERSION);
       }
 }
