@@ -17,6 +17,13 @@ use PDOStatement;
 class PDOEngine extends PDO
 {
     /**
+     * Client string for WP Debug page
+     *
+     * @var string
+     */
+    public $client_info = '';
+
+    /**
      * Class variable to check if there is an error.
      *
      * @var boolean
@@ -40,7 +47,7 @@ class PDOEngine extends PDO
     /**
      * Class variable to store the rewritten queries.
      *
-     * @var    string|array
+     * @var    array
      * @access private
      */
     private $rewritten_query;
@@ -101,14 +108,6 @@ class PDOEngine extends PDO
      * @access private
      */
     private $error_messages = [];
-
-    /**
-     * Class variable to store the file name and function to cause error.
-     *
-     * @var    array
-     * @access private
-     */
-    private $errors;
 
     /**
      * Class variable to store the query strings.
@@ -195,37 +194,42 @@ class PDOEngine extends PDO
     public function __construct()
     {
         register_shutdown_function([$this, '__destruct']);
+
         if (!is_file(FQDB)) {
             $this->prepare_directory();
         }
-        $dsn = 'sqlite:' . FQDB;
+
         if (isset($GLOBALS['@pdo'])) {
             $this->pdo = $GLOBALS['@pdo'];
-        } else {
-            $locked = false;
-            $status = 0;
-            do {
-                try {
-                    $this->pdo = new PDO($dsn, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-                    new PDOSQLiteUDFS($this->pdo);
-                    $GLOBALS['@pdo'] = $this->pdo;
-                } catch (PDOException $ex) {
-                    $status = $ex->getCode();
-                    if ($status == 5 || $status == 6) {
-                        $locked = true;
-                    } else {
-                        $err_message = $ex->getMessage();
-                    }
-                }
-            } while ($locked);
-            if ($status > 0) {
-                $message = 'Database initialization error!<br />Code: ' . $status .
-                  (isset($err_message) ? '<br />Error Message: ' . $err_message : '');
-                $this->set_error(__LINE__, __METHOD__, $message);
-
-                return false;
-            }
+            $this->init();
+            return;
         }
+
+        $reason = 0;
+
+        do {
+            try {
+                $this->pdo = new PDO('sqlite:' . FQDB, null, null, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+                new PDOSQLiteUDFS($this->pdo);
+                $GLOBALS['@pdo'] = $this->pdo;
+            } catch (PDOException $err) {
+                $reason = $err->errorInfo[1];
+                $err_message = $err->getMessage();
+            }
+        } while ($reason == 5 || $reason == 6);
+
+        if ($reason > 0) {
+            $message = sprintf(
+                '<p>%s</p><p>%s</p><p>%s</p>',
+                'Database initialization error!',
+                sprintf('Code: %d', $reason),
+                sprintf('Error Message: %s', $err_message)
+            );
+            $this->set_error(__LINE__, __METHOD__, $message, $reason);
+
+            return false;
+        }
+
         $this->init();
     }
 
@@ -243,6 +247,7 @@ class PDOEngine extends PDO
     {
         if (defined('SQLITE_MEM_DEBUG') && \SQLITE_MEM_DEBUG) {
             $max = ini_get('memory_limit');
+
             if (is_null($max)) {
                 $message = sprintf(
                     "[%s] Memory_limit is not set in php.ini file.",
@@ -252,11 +257,14 @@ class PDOEngine extends PDO
 
                 return true;
             }
+
             if (stripos($max, 'M') !== false) {
                 $max = (int) $max * 1024 * 1024;
             }
+
             $peak = memory_get_peak_usage(true);
             $used = round((int) $peak / (int) $max * 100, 2);
+
             if ($used > 90) {
                 $message = sprintf(
                     "[%s] Memory peak usage warning: %s %% used. (max: %sM, now: %sM)\n",
@@ -269,7 +277,6 @@ class PDOEngine extends PDO
             }
         }
 
-        //$this->pdo = null;
         return true;
     }
 
@@ -284,10 +291,14 @@ class PDOEngine extends PDO
      */
     private function init()
     {
-        if (version_compare($this->get_sqlite_version(), '3.7.11', '>=')) {
+        $this->client_info = $this->pdo->getAttribute(\PDO::ATTR_CLIENT_VERSION);
+
+        if (version_compare($this->client_info, '3.7.11', '>=')) {
             $this->can_insert_multiple_rows = true;
         }
+
         $statement = $this->pdo->query('PRAGMA foreign_keys');
+
         if ($statement->fetchColumn(0) == '0') {
             $this->pdo->query('PRAGMA foreign_keys = ON');
         }
@@ -301,16 +312,19 @@ class PDOEngine extends PDO
     private function prepare_directory()
     {
         $u = umask(0000);
+
         if (!is_dir(FQDBDIR)) {
             if (!@mkdir(FQDBDIR, 0704, true)) {
                 umask($u);
                 wp_die('Unable to create the required directory! Please check your server settings.', 'WP SQLite DB Error');
             }
         }
+
         if (!is_writable(FQDBDIR)) {
             umask($u);
             wp_die('Unable to create a file in the directory! Please check your server settings.', 'WP SQLite DB Error');
         }
+
         if (!is_file(FQDBDIR . '.htaccess')) {
             $fh = fopen(FQDBDIR . '.htaccess', "w");
             if (!$fh) {
@@ -320,6 +334,7 @@ class PDOEngine extends PDO
             fwrite($fh, 'DENY FROM ALL');
             fclose($fh);
         }
+
         if (!is_file(FQDBDIR . 'index.php')) {
             $fh = fopen(FQDBDIR . 'index.php', "w");
             if (!$fh) {
@@ -329,6 +344,7 @@ class PDOEngine extends PDO
             fwrite($fh, '<?php // Silence is golden. ?>');
             fclose($fh);
         }
+
         umask($u);
 
         return true;
@@ -368,13 +384,12 @@ class PDOEngine extends PDO
 
         $this->queries[] = "Raw query:\n$statement";
         $res             = $this->determine_query_type($statement);
+
         if (!$res && defined('PDO_DEBUG') && \PDO_DEBUG) {
-            $bailoutString = sprintf(__(
-                "<h1>Unknown query type</h1><p>Sorry, we cannot determine the type of query that is requested.</p><p>The query is %s</p>",
-                'sqlite-integration'
-            ), $statement);
-            $this->set_error(__LINE__, __FUNCTION__, $bailoutString);
+            $bailoutString = "<h1>Unknown query type</h1><p>Sorry, we cannot determine the type of query that is requested.</p>";
+            $this->set_error(__LINE__, __FUNCTION__, $bailoutString, 0);
         }
+
         switch (strtolower($this->query_type)) {
             case 'set':
                 $this->return_value = false;
@@ -385,9 +400,6 @@ class PDOEngine extends PDO
                 if (!is_null($this->found_rows_result)) {
                     $this->num_rows          = $this->found_rows_result;
                     $_column['FOUND_ROWS()'] = $this->num_rows;
-                    //foreach ($this->found_rows_result[0] as $key => $value) {
-                    //$_column['FOUND_ROWS()'] = $value;
-                    //}
                     $column[]                = new ObjectArray($_column);
                     $this->results           = $column;
                     $this->found_rows_result = null;
@@ -396,17 +408,15 @@ class PDOEngine extends PDO
             case 'insert':
                 if ($this->can_insert_multiple_rows) {
                     $this->execute_insert_query_new($statement);
-                } else {
-                    $this->execute_insert_query($statement);
+                    break;
                 }
+                $this->execute_insert_query($statement);
                 break;
             case 'create':
-                $result             = $this->execute_create_query($statement);
-                $this->return_value = $result;
+                $this->return_value = $this->execute_create_query($statement);
                 break;
             case 'alter':
-                $result             = $this->execute_alter_query($statement);
-                $this->return_value = $result;
+                $this->return_value =  $this->execute_alter_query($statement);
                 break;
             case 'show_variables':
                 $this->return_value = $this->show_variables_workaround($statement);
@@ -415,34 +425,32 @@ class PDOEngine extends PDO
                 $this->return_value = $this->show_status_workaround($statement);
                 break;
             case 'drop_index':
-                $pattern = '/^\\s*(DROP\\s*INDEX\\s*.*?)\\s*ON\\s*(.*)/im';
-                if (preg_match($pattern, $statement, $match)) {
-                    $drop_query         = 'ALTER TABLE ' . trim($match[2]) . ' ' . trim($match[1]);
+                $this->return_value = false;
+
+                if (preg_match('/^\\s*(DROP\\s*INDEX\\s*.*?)\\s*ON\\s*(.*)/im', $statement, $match)) {
                     $this->query_type   = 'alter';
-                    $result             = $this->execute_alter_query($drop_query);
-                    $this->return_value = $result;
-                } else {
-                    $this->return_value = false;
+                    $this->return_value = $this->execute_alter_query('ALTER TABLE ' . trim($match[2]) . ' ' . trim($match[1]));
                 }
                 break;
             default:
                 $engine                = $this->prepare_engine($this->query_type);
                 $this->rewritten_query = $engine->rewrite_query($statement, $this->query_type);
+
                 if (!is_null($this->pre_ordered_results)) {
                     $this->results             = $this->pre_ordered_results;
                     $this->num_rows            = $this->return_value = count($this->results);
                     $this->pre_ordered_results = null;
                     break;
                 }
+
                 $this->queries[] = "Rewritten:\n$this->rewritten_query";
                 $this->extract_variables();
                 $prepared_query = $this->prepare_query();
                 $this->execute_query($prepared_query);
+
                 if (!$this->is_error) {
                     $this->process_results($engine);
-                } /* else {
-          // Error
-        } */
+                }
                 break;
         }
 
@@ -494,7 +502,9 @@ class PDOEngine extends PDO
               'umeta_id',
               'id',
             ];
+
             $unique_key  = ['term_id', 'taxonomy', 'slug'];
+
             $data        = [
               'name'         => '', // column name
               'table'        => '', // table name
@@ -509,11 +519,12 @@ class PDOEngine extends PDO
               'unsigned'     => 0,  // 1 if column is unsigned integer
               'zerofill'     => 0,   // 1 if column is zero-filled
             ];
+
+            $table_name = '';
             if (preg_match("/\s*FROM\s*(.*)?\s*/i", $this->rewritten_query, $match)) {
                 $table_name = trim($match[1]);
-            } else {
-                $table_name = '';
             }
+
             foreach ($this->results[0] as $key => $value) {
                 $data['name']  = $key;
                 $data['table'] = $table_name;
@@ -524,7 +535,9 @@ class PDOEngine extends PDO
                 } else {
                     $data['multiple_key'] = 1;
                 }
+
                 $this->column_data[]  = new ObjectArray($data);
+
                 $data['name']         = '';
                 $data['table']        = '';
                 $data['primary_key']  = 0;
@@ -533,9 +546,9 @@ class PDOEngine extends PDO
             }
 
             return $this->column_data;
-        } else {
-            return null;
         }
+
+        return null;
     }
 
     /**
@@ -579,24 +592,35 @@ class PDOEngine extends PDO
 
             return '';
         }
-        $output = '<div style="clear:both">&nbsp;</div>';
-        if ($this->is_error === false) {
-            //return $output;
-            return '';
-        }
-        $output .= "<div class=\"queries\" style=\"clear:both; margin_bottom:2px; border: red dotted thin;\">Queries made or created this session were<br/>\r\n\t<ol>\r\n";
-        foreach ($this->queries as $q) {
-            $output .= "\t\t<li>" . $q . "</li>\r\n";
-        }
-        $output .= "\t</ol>\r\n</div>";
-        foreach ($this->error_messages as $num => $m) {
-            $output .= "<div style=\"clear:both; margin_bottom:2px; border: red dotted thin;\" class=\"error_message\" style=\"border-bottom:dotted blue thin;\">Error occurred at line {$this->errors[$num]['line']} in Function {$this->errors[$num]['function']}. <br/> Error message was: $m </div>";
+
+        // $output  = '<div style="clear:both">&nbsp;</div>';
+        $output = '';
+
+        foreach ($this->error_messages as $error_message) {
+            // $output .= '<div style="clear:both;margin_bottom:2px;border:red dotted thin;" class="error_message" style="border-bottom:dotted blue thin;">';
+            // $output .= sprintf(
+            //     'Error occurred at line %1$d in Function %2$s. Error message was: %3$s.',
+            //     (int) $error_message['line'],
+            //     '<code>' . $error_message['function'] . '</code>',
+            //     $error_message['message']
+            // );
+            // $output .= '</div>';
+            $output .= $error_message['message'];
         }
 
-        ob_start();
-        debug_print_backtrace();
-        $output .= '<pre>' . ob_get_contents() . '</pre>';
-        ob_end_clean();
+        // $output .= '<div class="queries" style="clear:both;margin_bottom:2px;border:red dotted thin;">';
+        // $output .= '<p>Queries made or created this session were: </p>';
+        // $output .= '<ol>';
+        // foreach ($this->queries as $q) {
+        //     $output .= '<li>' . $q . '</li>';
+        // }
+        // $output .= '</ol>';
+        // $output .= '</div>';
+
+        // ob_start();
+        // debug_print_backtrace();
+        // $output .= '<pre>' . ob_get_contents() . '</pre>';
+        // ob_end_clean();
 
         return $output;
     }
@@ -609,6 +633,7 @@ class PDOEngine extends PDO
     private function get_debug_info()
     {
         $output = '';
+
         foreach ($this->queries as $q) {
             $output .= $q . "\n";
         }
@@ -640,24 +665,19 @@ class PDOEngine extends PDO
     /**
      * Method to include the apropreate class files.
      *
-     * It is not a good habit to change the include files programatically.
-     * Needs to be fixed some other way.
-     *
      * @param string $query_type
      *
-     * @return object reference to apropreate driver
+     * @return CreateQuery|AlterQuery|PDOSQLiteDriver reference to apropreate driver
      */
     private function prepare_engine($query_type = null)
     {
         if (stripos($query_type, 'create') !== false) {
-            $engine = new CreateQuery();
+            return new CreateQuery();
         } elseif (stripos($query_type, 'alter') !== false) {
-            $engine = new AlterQuery();
-        } else {
-            $engine = new PDOSQLiteDriver();
+            return new AlterQuery();
         }
 
-        return $engine;
+        return new PDOSQLiteDriver();
     }
 
     /**
@@ -671,18 +691,19 @@ class PDOEngine extends PDO
         $reason          = 0;
         $message         = '';
         $statement       = null;
+
         do {
             try {
                 $statement = $this->pdo->prepare($this->prepared_query);
             } catch (PDOException $err) {
-                $reason  = $err->getCode();
+                $reason  = $err->errorInfo[1];
                 $message = $err->getMessage();
             }
         } while (5 == $reason || 6 == $reason);
 
         if ($reason > 0) {
-            $err_message = sprintf("Problem preparing the PDO SQL Statement.  Error was: %s", $message);
-            $this->set_error(__LINE__, __FUNCTION__, $err_message);
+            $err_message = sprintf("Problem preparing the PDO SQL Statement. %s", $message);
+            $this->set_error(__LINE__, __FUNCTION__, $err_message, $reason);
         }
 
         return $statement;
@@ -695,7 +716,7 @@ class PDOEngine extends PDO
      * The variables are class fields. So if success, no return value. If failure, it
      * returns void and stops.
      *
-     * @param object $statement of PDO statement
+     * @param PDOStatement $statement
      *
      * @return boolean
      */
@@ -703,57 +724,33 @@ class PDOEngine extends PDO
     {
         $reason  = 0;
         $message = '';
+
         if (!is_object($statement)) {
             return false;
         }
-        if (count($this->extracted_variables) > 0) {
-            $this->queries[] = "Executing:\n" . var_export($this->extracted_variables, true);
-            do {
-                if ($this->query_type == 'update' || $this->query_type == 'replace') {
-                    try {
-                        $statement->execute($this->extracted_variables);
-                    } catch (PDOException $err) {
-                        $reason  = $err->getCode();
-                        $message = $err->getMessage();
-                    }
-                } else {
-                    try {
-                        $statement->execute($this->extracted_variables);
-                    } catch (PDOException $err) {
-                        $reason  = $err->getCode();
-                        $message = $err->getMessage();
-                    }
-                }
-            } while (5 == $reason || 6 == $reason);
-        } else {
-            $this->queries[] = 'Executing: (no parameters)';
-            do {
-                if ($this->query_type == 'update' || $this->query_type == 'replace') {
-                    try {
-                        $statement->execute();
-                    } catch (PDOException $err) {
-                        $reason  = $err->getCode();
-                        $message = $err->getMessage();
-                    }
-                } else {
-                    try {
-                        $statement->execute();
-                    } catch (PDOException $err) {
-                        $reason  = $err->getCode();
-                        $message = $err->getMessage();
-                    }
-                }
-            } while (5 == $reason || 6 == $reason);
-        }
+
+        $params = count($this->extracted_variables) > 0 ? $this->extracted_variables : null;
+        $this->queries[] = "Executing:\n" . ($params ? var_export($params, true) : '(No Parameters)');
+
+        do {
+            try {
+                $statement->execute($params);
+            } catch (PDOException $err) {
+                $reason  = $err->errorInfo[1];
+                $message = $err->getMessage();
+            }
+        } while (5 == $reason || 6 == $reason);
+
         if ($reason > 0) {
-            $err_message = sprintf("Error while executing query! Error message was: %s", $message);
-            $this->set_error(__LINE__, __FUNCTION__, $err_message);
+            $err_message = sprintf("Error while executing query! %s", $message);
+            $this->set_error(__LINE__, __FUNCTION__, $err_message, $reason);
 
             return false;
-        } else {
-            $this->_results = $statement->fetchAll(PDO::FETCH_OBJ);
         }
-        //generate the results that $wpdb will want to see
+
+        $this->_results = $statement->fetchAll(PDO::FETCH_OBJ);
+
+        // Generate the results that $wpdb will want to see
         switch ($this->query_type) {
             case 'insert':
             case 'update':
@@ -783,10 +780,10 @@ class PDOEngine extends PDO
             case 'create':
             case 'optimize':
             case 'truncate':
+                $this->return_value = true;
+
                 if ($this->is_error) {
                     $this->return_value = false;
-                } else {
-                    $this->return_value = true;
                 }
                 break;
         }
@@ -805,10 +802,11 @@ class PDOEngine extends PDO
             return;
         }
 
-        //long queries can really kill this
+        // Long queries can really kill this
         $pattern = '/(?<!\\\\)([\'"])(.*?)(?<!\\\\)\\1/imsx';
+
         $_limit  = $limit = ini_get('pcre.backtrack_limit');
-        // if user's setting is more than default * 10, make PHP do the job.
+        // If user's setting is more than default * 10, make PHP do the job.
         if ($limit > 10000000) {
             $query = preg_replace_callback(
                 $pattern,
@@ -818,7 +816,7 @@ class PDOEngine extends PDO
         } else {
             do {
                 if ($limit > 10000000) {
-                    $this->set_error(__LINE__, __FUNCTION__, 'The query is too big to parse properly');
+                    $this->set_error(__LINE__, __FUNCTION__, 'The query is too big to parse properly', 0);
                     break; //no point in continuing execution, would get into a loop
                 } else {
                     ini_set('pcre.backtrack_limit', $limit);
@@ -831,7 +829,7 @@ class PDOEngine extends PDO
                 $limit = $limit * 10;
             } while (is_null($query));
 
-            //reset the pcre.backtrack_limit
+            // Reset the pcre.backtrack_limit
             ini_set('pcre.backtrack_limit', $_limit);
         }
 
@@ -863,11 +861,10 @@ class PDOEngine extends PDO
         if (in_array($param[0], ["'", '"'])) {
             $param = substr($param, 1); //start
         }
-        //$this->extracted_variables[] = $param;
+
         $key                         = ':param_' . $this->param_num++;
         $this->extracted_variables[] = $param;
-        //return the placeholder
-        //return ' ? ';
+
         return ' ' . $key . ' ';
     }
 
@@ -894,6 +891,7 @@ class PDOEngine extends PDO
         }
 
         $this->query_type = strtolower($match[1]);
+
         if (stripos($this->query_type, 'found') !== false) {
             $this->query_type = 'foundrows';
         }
@@ -905,21 +903,25 @@ class PDOEngine extends PDO
         if (stripos($this->query_type, 'show') !== false) {
             if (stripos($this->query_type, 'show table status') !== false) {
                 $this->query_type = 'showstatus';
-            } elseif (stripos($this->query_type, 'show tables') !== false
+            } elseif (
+                stripos($this->query_type, 'show tables') !== false
                 || stripos($this->query_type, 'show full tables') !== false
             ) {
                 $this->query_type = 'show';
-            } elseif (stripos($this->query_type, 'show columns') !== false
+            } elseif (
+                stripos($this->query_type, 'show columns') !== false
                 || stripos($this->query_type, 'show fields') !== false
                 || stripos($this->query_type, 'show full columns') !== false
             ) {
                 $this->query_type = 'showcolumns';
-            } elseif (stripos($this->query_type, 'show index') !== false
+            } elseif (
+                stripos($this->query_type, 'show index') !== false
                 || stripos($this->query_type, 'show indexes') !== false
                 || stripos($this->query_type, 'show keys') !== false
             ) {
                 $this->query_type = 'showindex';
-            } elseif (stripos($this->query_type, 'show variables') !== false
+            } elseif (
+                stripos($this->query_type, 'show variables') !== false
                 || stripos($this->query_type, 'show global variables') !== false
                 || stripos($this->query_type, 'show session variables') !== false
             ) {
@@ -965,44 +967,46 @@ class PDOEngine extends PDO
     private function execute_insert_query($query)
     {
         global $wpdb;
+
         $multi_insert = false;
         $statement    = null;
         $engine       = $this->prepare_engine($this->query_type);
+
         if (preg_match('/(INSERT.*?VALUES\\s*)(\(.*\))/imsx', $query, $matched)) {
             $query_prefix = $matched[1];
             $values_data  = $matched[2];
-            if (stripos($values_data, 'ON DUPLICATE KEY') !== false) {
-                $exploded_parts = $values_data;
-            } elseif (stripos($query_prefix, "INSERT INTO $wpdb->comments") !== false) {
+
+            if (
+                stripos($values_data, 'ON DUPLICATE KEY') !== false
+                || stripos($query_prefix, "INSERT INTO $wpdb->comments") !== false
+            ) {
                 $exploded_parts = $values_data;
             } else {
                 $exploded_parts = $this->parse_multiple_inserts($values_data);
             }
-            $count = count($exploded_parts);
-            if ($count > 1) {
+
+            if (count($exploded_parts) > 1) {
                 $multi_insert = true;
             }
         }
+
         if ($multi_insert) {
             $first = true;
+
             foreach ($exploded_parts as $value) {
-                if (substr($value, -1, 1) === ')') {
-                    $suffix = '';
-                } else {
-                    $suffix = ')';
-                }
+                $suffix = (substr($value, -1, 1) === ')') ? '' : ')';
                 $query_string              = $query_prefix . ' ' . $value . $suffix;
                 $this->rewritten_query     = $engine->rewrite_query($query_string, $this->query_type);
                 $this->queries[]           = "Rewritten:\n" . $this->rewritten_query;
                 $this->extracted_variables = [];
                 $this->extract_variables();
+
                 if ($first) {
                     $statement = $this->prepare_query();
-                    $this->execute_query($statement);
                     $first = false;
-                } else {
-                    $this->execute_query($statement);
                 }
+
+                $this->execute_query($statement);
             }
         } else {
             $this->rewritten_query = $engine->rewrite_query($query, $this->query_type);
@@ -1028,6 +1032,7 @@ class PDOEngine extends PDO
         $exploded_parts = [];
         $part           = '';
         $literal        = false;
+
         foreach ($tokens as $token) {
             switch ($token) {
                 case "),":
@@ -1039,11 +1044,7 @@ class PDOEngine extends PDO
                     }
                     break;
                 case "'":
-                    if ($literal) {
-                        $literal = false;
-                    } else {
-                        $literal = true;
-                    }
+                    $literal = ! $literal;
                     $part .= $token;
                     break;
                 default:
@@ -1051,6 +1052,7 @@ class PDOEngine extends PDO
                     break;
             }
         }
+
         if (!empty($part)) {
             $exploded_parts[] = $part;
         }
@@ -1061,7 +1063,7 @@ class PDOEngine extends PDO
     /**
      * Method to execute CREATE query.
      *
-     * @param string
+     * @param string $query
      *
      * @return boolean
      */
@@ -1071,7 +1073,7 @@ class PDOEngine extends PDO
         $rewritten_query = $engine->rewrite_query($query);
         $reason          = 0;
         $message         = '';
-        //$queries = explode(";", $this->rewritten_query);
+
         try {
             foreach ($rewritten_query as $single_query) {
                 $this->queries[] = "Executing:\n" . $single_query;
@@ -1082,15 +1084,13 @@ class PDOEngine extends PDO
                 $this->pdo->exec($single_query);
             }
         } catch (PDOException $err) {
-            $reason  = $err->getCode();
+            $reason  = $err->errorInfo[1];
             $message = $err->getMessage();
-            // if (5 == $reason || 6 == $reason) {
-            // } else {
-            // }
         }
+
         if ($reason > 0) {
-            $err_message = sprintf("Problem in creating table or index. Error was: %s", $message);
-            $this->set_error(__LINE__, __FUNCTION__, $err_message);
+            $err_message = sprintf("Problem in creating table or index. %s", $message);
+            $this->set_error(__LINE__, __FUNCTION__, $err_message, $reason);
 
             return false;
         }
@@ -1101,7 +1101,7 @@ class PDOEngine extends PDO
     /**
      * Method to execute ALTER TABLE query.
      *
-     * @param string
+     * @param string $query
      *
      * @return boolean
      */
@@ -1112,41 +1112,37 @@ class PDOEngine extends PDO
         $message         = '';
         $re_query        = '';
         $rewritten_query = $engine->rewrite_query($query, $this->query_type);
+
         if (is_array($rewritten_query) && array_key_exists('recursion', $rewritten_query)) {
             $re_query = $rewritten_query['recursion'];
             unset($rewritten_query['recursion']);
         }
+
         try {
-            if (is_array($rewritten_query)) {
-                foreach ($rewritten_query as $single_query) {
-                    $this->queries[] = "Executing:\n" . $single_query;
-                    $single_query    = trim($single_query);
-                    if (empty($single_query)) {
-                        continue;
-                    }
-                    $this->pdo->exec($single_query);
+            foreach ((array) $rewritten_query as $single_query) {
+                $this->queries[] = "Executing:\n" . $single_query;
+                $single_query    = trim($single_query);
+                if (empty($single_query)) {
+                    continue;
                 }
-            } else {
-                $this->queries[] = "Executing:\n" . $rewritten_query;
-                $rewritten_query = trim($rewritten_query);
-                $this->pdo->exec($rewritten_query);
+                $this->pdo->exec($single_query);
             }
         } catch (PDOException $err) {
-            $reason  = $err->getCode();
+            $reason  = $err->errorInfo[1];
             $message = $err->getMessage();
+
             if (5 == $reason || 6 == $reason) {
                 usleep(10000);
-            } /* else {
-      } */
+            }
         }
 
-        if ($re_query != '') {
+        if (!empty($re_query)) {
             $this->query($re_query);
         }
 
         if ($reason > 0) {
-            $err_message = sprintf("Problem in executing alter query. Error was: %s", $message);
-            $this->set_error(__LINE__, __FUNCTION__, $err_message);
+            $err_message = sprintf("Problem in executing alter query. %s", $message);
+            $this->set_error(__LINE__, __FUNCTION__, $err_message, $reason);
 
             return false;
         }
@@ -1160,24 +1156,30 @@ class PDOEngine extends PDO
      * This query is meaningless for SQLite. This function returns null data with some
      * exceptions and only avoids the error message.
      *
-     * @param string
+     * @param string $query
      *
      * @return bool
      */
     private function show_variables_workaround($query)
     {
-        $dummy_data = ['Variable_name' => '', 'Value' => null];
-        $pattern    = '/SHOW\\s*VARIABLES\\s*LIKE\\s*(.*)?$/im';
-        if (preg_match($pattern, $query, $match)) {
-            $value                       = str_replace("'", '', $match[1]);
-            $dummy_data['Variable_name'] = trim($value);
-            // this is set for Wordfence Security Plugin
-            if ($value == 'max_allowed_packet') {
-                $dummy_data['Value'] = 1047552;
-            } else {
-                $dummy_data['Value'] = '';
+        $dummy_data = [
+            'Variable_name' => '',
+            'Value' => null,
+        ];
+
+        if (preg_match('/SHOW\\s*VARIABLES\\s*LIKE\\s*(.*)?$/im', $query, $match)) {
+            $dummy_data['Variable_name'] = trim(str_replace("'", '', $match[1]));
+
+            switch ($dummy_data['Variable_name']) {
+                case 'max_allowed_packet':
+                    // This is set for Wordfence Security Plugin
+                    $dummy_data['Value'] = 1047552;
+                    break;
+                default:
+                    $dummy_data['Value'] = '';
             }
         }
+
         $_results[]         = new ObjectArray($dummy_data);
         $this->results      = $_results;
         $this->num_rows     = count($this->results);
@@ -1191,18 +1193,17 @@ class PDOEngine extends PDO
      *
      * This query is meaningless for SQLite. This function return dummy data.
      *
-     * @param string
+     * @param string $query
      *
      * @return bool
      */
     private function show_status_workaround($query)
     {
-        $pattern = '/^SHOW\\s*TABLE\\s*STATUS\\s*LIKE\\s*(.*?)$/im';
-        if (preg_match($pattern, $query, $match)) {
+        $table_name = '';
+        if (preg_match('/^SHOW\\s*TABLE\\s*STATUS\\s*LIKE\\s*(.*?)$/im', $query, $match)) {
             $table_name = str_replace("'", '', $match[1]);
-        } else {
-            $table_name = '';
         }
+
         $dummy_data         = [
           'Name'            => $table_name,
           'Engine'          => '',
@@ -1238,11 +1239,11 @@ class PDOEngine extends PDO
      */
     private function process_results($engine)
     {
-        if (in_array($this->query_type, ['describe', 'desc', 'showcolumns'])) {
+        if (in_array($this->query_type, ['describe', 'desc', 'showcolumns'], true)) {
             $this->convert_to_columns_object();
         } elseif ('showindex' === $this->query_type) {
             $this->convert_to_index_object();
-        } elseif (in_array($this->query_type, ['check', 'analyze'])) {
+        } elseif (in_array($this->query_type, ['check', 'analyze'], true)) {
             $this->convert_result_check_or_analyze();
         } else {
             $this->results = $this->_results;
@@ -1258,43 +1259,31 @@ class PDOEngine extends PDO
      * @param string $line where the error occurred.
      * @param string $function to indicate the function name where the error occurred.
      * @param string $message
+     * @param string $code
      *
      * @return boolean
      */
-    private function set_error($line, $function, $message)
+    private function set_error($line, $function, $message, $code)
     {
-        global $wpdb;
-        $this->errors[]         = ["line" => $line, "function" => $function];
-        $this->error_messages[] = $message;
         $this->is_error         = true;
-        if ($wpdb->suppress_errors) {
-            return false;
-        }
-        if (!$wpdb->show_errors) {
-            return false;
-        }
-        file_put_contents(FQDBDIR . 'debug.txt', "Line $line, Function: $function, Message: $message \n", FILE_APPEND);
-    }
 
-    /**
-     * Method to change the queried data to PHP object format.
-     *
-     * It takes the associative array of query results and creates a numeric
-     * array of anonymous objects
-     *
-     * @access private
-     */
-    private function convert_to_object()
-    {
-        $_results = [];
-        if (count($this->results) === 0) {
-            echo $this->get_error_message();
-        } else {
-            foreach ($this->results as $row) {
-                $_results[] = new ObjectArray($row);
-            }
-        }
-        $this->results = $_results;
+        $this->error_messages[] = [
+            'message' => $message,
+            'code' => $code,
+            'line' => $line,
+            'function' => $function,
+        ];
+
+        // FIXME: Errors when $wpdb is not set up yet/is being set up
+        // if ($wpdb->suppress_errors) {
+        //     return false;
+        // }
+
+        // if (!$wpdb->show_errors) {
+        //     return false;
+        // }
+
+        // file_put_contents(FQDBDIR . 'debug.txt', "Line $line, Function: $function, Message: $message \n", FILE_APPEND);
     }
 
     /**
@@ -1308,26 +1297,43 @@ class PDOEngine extends PDO
     private function convert_to_columns_object()
     {
         $_results = [];
-        $_columns = [ //Field names MySQL SHOW COLUMNS returns
-          'Field'   => "",
-          'Type'    => "",
-          'Null'    => "",
-          'Key'     => "",
-          'Default' => "",
-          'Extra'   => "",
+        // Field names MySQL SHOW COLUMNS returns
+        $_columns = [
+          'Field'   => '',
+          'Type'    => '',
+          'Null'    => '',
+          'Key'     => '',
+          'Default' => '',
+          'Extra'   => '',
         ];
-        if (empty($this->_results)) {
+
+        if (count($this->_results) == 0) {
             echo $this->get_error_message();
         } else {
             foreach ($this->_results as $row) {
-                $_columns['Field']   = $row->name;
-                $_columns['Type']    = $row->type;
-                $_columns['Null']    = $row->notnull ? "NO" : "YES";
-                $_columns['Key']     = $row->pk ? "PRI" : "";
-                $_columns['Default'] = $row->dflt_value;
+                if (! is_object($row)) {
+                    continue;
+                }
+                if (property_exists($row, 'name')) {
+                    $_columns['Field'] = $row->name;
+                }
+                if (property_exists($row, 'type')) {
+                    $_columns['Type'] = $row->type;
+                }
+                if (property_exists($row, 'notnull')) {
+                    $_columns['Null'] = $row->notnull ? 'NO' : 'YES';
+                }
+                if (property_exists($row, 'pk')) {
+                    $_columns['Key'] = $row->pk ? 'PRI' : '';
+                }
+                if (property_exists($row, 'dflt_value')) {
+                    $_columns['Default'] = $row->dflt_value;
+                }
+
                 $_results[]          = new ObjectArray($_columns);
             }
         }
+
         $this->results = $_results;
     }
 
@@ -1343,18 +1349,18 @@ class PDOEngine extends PDO
     {
         $_results = [];
         $_columns = [
-          'Table'        => "",
-          'Non_unique'   => "", // unique -> 0, not unique -> 1
-          'Key_name'     => "", // the name of the index
-          'Seq_in_index' => "", // column sequence number in the index. begins at 1
-          'Column_name'  => "",
-          'Collation'    => "", //A(scend) or NULL
-          'Cardinality'  => "",
-          'Sub_part'     => "", // set to NULL
-          'Packed'       => "", // How to pack key or else NULL
-          'Null'         => "", // If column contains null, YES. If not, NO.
-          'Index_type'   => "", // BTREE, FULLTEXT, HASH, RTREE
-          'Comment'      => "",
+          'Table'        => '',
+          'Non_unique'   => '', // unique -> 0, not unique -> 1
+          'Key_name'     => '', // the name of the index
+          'Seq_in_index' => '', // column sequence number in the index. begins at 1
+          'Column_name'  => '',
+          'Collation'    => '', //A(scend) or NULL
+          'Cardinality'  => '',
+          'Sub_part'     => '', // set to NULL
+          'Packed'       => '', // How to pack key or else NULL
+          'Null'         => '', // If column contains null, YES. If not, NO.
+          'Index_type'   => '', // BTREE, FULLTEXT, HASH, RTREE
+          'Comment'      => '',
         ];
         if (count($this->_results) == 0) {
             echo $this->get_error_message();
@@ -1366,6 +1372,7 @@ class PDOEngine extends PDO
                 if ($row->type == 'index' && stripos($row->name, 'sqlite_autoindex') !== false) {
                     continue;
                 }
+
                 switch ($row->type) {
                     case 'table':
                         $pattern1 = '/^\\s*PRIMARY.*\((.*)\)/im';
@@ -1383,20 +1390,19 @@ class PDOEngine extends PDO
                         }
                         break;
                     case 'index':
+                        $_columns['Non_unique'] = 1;
                         if (stripos($row->sql, 'unique') !== false) {
                             $_columns['Non_unique'] = 0;
-                        } else {
-                            $_columns['Non_unique'] = 1;
                         }
+
                         if (preg_match('/^.*\((.*)\)/i', $row->sql, $match)) {
                             $col_name                = str_replace("'", '', $match[1]);
                             $_columns['Column_name'] = trim($col_name);
                         }
                         $_columns['Key_name'] = $row->name;
                         break;
-                    default:
-                        break;
                 }
+
                 $_columns['Table']       = $row->tbl_name;
                 $_columns['Collation']   = null;
                 $_columns['Cardinality'] = 0;
@@ -1405,8 +1411,10 @@ class PDOEngine extends PDO
                 $_columns['Null']        = 'NO';
                 $_columns['Index_type']  = 'BTREE';
                 $_columns['Comment']     = '';
+
                 $_results[]              = new ObjectArray($_columns);
             }
+
             if (stripos($this->queries[0], 'WHERE') !== false) {
                 preg_match('/WHERE\\s*(.*)$/im', $this->queries[0], $match);
                 list($key, $value) = explode('=', $match[1]);
@@ -1415,7 +1423,8 @@ class PDOEngine extends PDO
                 $value = trim($value);
 
                 foreach ($_results as $result) {
-                    if (!empty($result->$key)
+                    if (
+                        !empty($result->$key)
                         && is_scalar($result->$key)
                         && stripos($value, $result->$key) !== false
                     ) {
@@ -1426,6 +1435,7 @@ class PDOEngine extends PDO
                 }
             }
         }
+
         $this->results = $_results;
     }
 
@@ -1436,47 +1446,15 @@ class PDOEngine extends PDO
      */
     private function convert_result_check_or_analyze()
     {
-        $_results = [];
+        $is_check      = 'check' === $this->query_type;
+        $_results[]    = new ObjectArray([
+            'Table'    => '',
+            'Op'       => $is_check ? 'check' : 'analyze',
+            'Msg_type' => 'status',
+            'Msg_text' => $is_check ? 'OK' : 'Table is already up to date',
+        ]);
 
-        if ($this->query_type == 'check') {
-            $_columns = [
-              'Table'    => '',
-              'Op'       => 'check',
-              'Msg_type' => 'status',
-              'Msg_text' => 'OK',
-            ];
-        } else {
-            $_columns = [
-              'Table'    => '',
-              'Op'       => 'analyze',
-              'Msg_type' => 'status',
-              'Msg_text' => 'Table is already up to date',
-            ];
-        }
-
-        $_results[]    = new ObjectArray($_columns);
         $this->results = $_results;
-    }
-
-    /**
-     * Method to check SQLite library version.
-     *
-     * This is used for checking if SQLite can execute multiple rows insert.
-     *
-     * @return string
-     * @access private
-     */
-    private function get_sqlite_version()
-    {
-        try {
-            $statement = $this->pdo->prepare('SELECT sqlite_version()');
-            $statement->execute();
-            $result = $statement->fetch(PDO::FETCH_NUM);
-
-            return $result[0];
-        } catch (PDOException $err) {
-            return '0';
-        }
     }
 
     /**

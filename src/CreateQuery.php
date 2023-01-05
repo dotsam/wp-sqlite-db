@@ -16,6 +16,7 @@ class CreateQuery
      * @access private
      */
     private $_query = '';
+
     /**
      * The array to contain CREATE INDEX queries.
      *
@@ -23,6 +24,7 @@ class CreateQuery
      * @access private
      */
     private $index_queries = [];
+
     /**
      * The array to contain error messages.
      *
@@ -30,6 +32,7 @@ class CreateQuery
      * @access private
      */
     private $_errors = [];
+
     /**
      * Variable to have the table name to be executed.
      *
@@ -37,6 +40,7 @@ class CreateQuery
      * @access private
      */
     private $table_name = '';
+
     /**
      * Variable to check if the query has the primary key.
      *
@@ -50,25 +54,29 @@ class CreateQuery
      *
      * @param string $query the query being processed
      *
-     * @return string|array    the processed (rewritten) query
+     * @return string    the processed (rewritten) query
      */
     public function rewrite_query($query)
     {
         $this->_query     = $query;
         $this->_errors[] = '';
+
         if (preg_match('/^CREATE\\s*(UNIQUE|FULLTEXT|)\\s*INDEX/ims', $this->_query, $match)) {
             // we manipulate CREATE INDEX query in PDOEngine.class.php
             // FULLTEXT index creation is simply ignored.
             if (isset($match[1]) && stripos($match[1], 'fulltext') !== false) {
                 return 'SELECT 1=1';
-            } else {
-                return $this->_query;
             }
-        } elseif (preg_match('/^CREATE\\s*(TEMP|TEMPORARY|)\\s*TRIGGER\\s*/im', $this->_query)) {
+
+            return $this->_query;
+        }
+
+        if (preg_match('/^CREATE\\s*(TEMP|TEMPORARY|)\\s*TRIGGER\\s*/im', $this->_query)) {
             // if WordPress comes to use foreign key constraint, trigger will be needed.
             // we don't use it for now.
             return $this->_query;
         }
+
         $this->strip_backticks();
         $this->quote_illegal_field();
         $this->get_table_name();
@@ -99,7 +107,6 @@ class CreateQuery
      */
     private function get_table_name()
     {
-        // $pattern = '/^\\s*CREATE\\s*(TEMP|TEMPORARY)?\\s*TABLE\\s*(IF NOT EXISTS)?\\s*([^\(]*)/imsx';
         $pattern = '/^\\s*CREATE\\s*(?:TEMP|TEMPORARY)?\\s*TABLE\\s*(?:IF\\s*NOT\\s*EXISTS)?\\s*([^\(]*)/imsx';
         if (preg_match($pattern, $this->_query, $matches)) {
             $this->table_name = trim($matches[1]);
@@ -153,6 +160,7 @@ class CreateQuery
           'longblob'   => 'blob',
           'longtext'   => 'text',
         ];
+
         foreach ($array_types as $o => $r) {
             if (preg_match("/^\\s*(?<!')$o\\s+(.+$)/im", $this->_query, $match)) {
                 $ptrn         = "/$match[1]/im";
@@ -160,11 +168,9 @@ class CreateQuery
                 $replaced     = str_ireplace($o, "'{$o}'", $replaced);
                 $this->_query = str_replace('#placeholder#', $ptrn, $replaced);
             }
-            $pattern = "/\\b(?<!')$o\\b\\s*(\([^\)]*\)*)?\\s*/ims";
-            if (preg_match("/^\\s*.*?\\s*\(.*?$o.*?\)/im", $this->_query)) {
-                ;
-            } else {
-                $this->_query = preg_replace($pattern, " $r ", $this->_query);
+
+            if (!preg_match("/^\\s*.*?\\s*\(.*?$o.*?\)/im", $this->_query)) {
+                $this->_query = preg_replace("/\\b(?<!')$o\\b\\s*(\([^\)]*\)*)?\\s*/ims", " $r ", $this->_query);
             }
         }
     }
@@ -297,24 +303,24 @@ class CreateQuery
     {
         $index_name = trim($matches[1]);
         $col_name   = trim($matches[2]);
-        $tbl_name   = $this->table_name;
+
         if (preg_match('/\(\\d+?\)/', $col_name)) {
             $col_name = preg_replace('/\(\\d+?\)/', '', $col_name);
         }
-        $_wpdb   = new wpsqlitedb();
-        $results = $_wpdb->get_results("SELECT name FROM sqlite_master WHERE type='index'");
-        $_wpdb   = null;
+
+        $results = (new wpsqlitedb())->get_results("SELECT name FROM sqlite_master WHERE type='index'");
+
         if ($results) {
             foreach ($results as $result) {
                 if ($result->name == $index_name) {
-                    $r          = rand(0, 50);
-                    $index_name = $index_name . "_$r";
+                    $index_name = $index_name . "_" . rand(0, 50);
                     break;
                 }
             }
         }
+
         $index_name            = str_replace(' ', '', $index_name);
-        $this->index_queries[] = "CREATE UNIQUE INDEX $index_name ON " . $tbl_name . $col_name;
+        $this->index_queries[] = "CREATE UNIQUE INDEX $index_name ON " . $this->table_name . $col_name;
 
         return '';
     }
@@ -335,7 +341,7 @@ class CreateQuery
     /**
      * Call back method for rewrite_enum() and rewrite_set().
      *
-     * @param $matches
+     * @param array $matches
      *
      * @access private
      *
@@ -343,9 +349,7 @@ class CreateQuery
      */
     private function _rewrite_enum($matches)
     {
-        $output = $matches[1] . ' ' . $matches[2] . ' TEXT ' . $matches[4] . ' CHECK (' . $matches[2] . ' IN (' . $matches[3] . ')) ';
-
-        return $output;
+        return $matches[1] . ' ' . $matches[2] . ' TEXT ' . $matches[4] . ' CHECK (' . $matches[2] . ' IN (' . $matches[3] . ')) ';
     }
 
     /**
@@ -390,13 +394,13 @@ class CreateQuery
     {
         $index_name = trim($matches[2]);
         $col_name   = trim($matches[3]);
+
         if (preg_match('/\([0-9]+?\)/', $col_name, $match)) {
             $col_name = preg_replace_callback('/\([0-9]+?\)/', [$this, '_remove_length'], $col_name);
         }
-        $tbl_name = $this->table_name;
-        $_wpdb    = new wpsqlitedb();
-        $results  = $_wpdb->get_results("SELECT name FROM sqlite_master WHERE type='index'");
-        $_wpdb    = null;
+
+        $results  = (new wpsqlitedb())->get_results("SELECT name FROM sqlite_master WHERE type='index'");
+
         if ($results) {
             foreach ($results as $result) {
                 if ($result->name == $index_name) {
@@ -406,7 +410,7 @@ class CreateQuery
                 }
             }
         }
-        $this->index_queries[] = 'CREATE INDEX ' . $index_name . ' ON ' . $tbl_name . $col_name;
+        $this->index_queries[] = 'CREATE INDEX ' . $index_name . ' ON ' . $this->table_name . $col_name;
 
         return '';
     }
@@ -437,18 +441,18 @@ class CreateQuery
     private function post_process()
     {
         $mainquery = $this->_query;
+
         do {
             $count     = 0;
             $mainquery = preg_replace('/,\\s*\)/imsx', ')', $mainquery, -1, $count);
         } while ($count > 0);
+
         do {
             $count     = 0;
             $mainquery = preg_replace('/\(\\s*?,/imsx', '(', $mainquery, -1, $count);
         } while ($count > 0);
-        $return_val[] = $mainquery;
-        $return_val   = array_merge($return_val, $this->index_queries);
 
-        return $return_val;
+        return array_merge([$mainquery], $this->index_queries);
     }
 
     /**
@@ -464,6 +468,7 @@ class CreateQuery
         $pattern_table = '/^\\s*CREATE\\s*(TEMP|TEMPORARY)?\\s*TABLE\\s*(IF NOT EXISTS)?\\s*/ims';
         $this->_query  = preg_replace($pattern_table, 'CREATE $1 TABLE IF NOT EXISTS ', $this->_query);
         $pattern_index = '/^\\s*CREATE\\s*(UNIQUE)?\\s*INDEX\\s*(IF NOT EXISTS)?\\s*/ims';
+
         for ($i = 0; $i < count($this->index_queries); $i++) {
             $this->index_queries[$i] = preg_replace(
                 $pattern_index,
@@ -481,6 +486,7 @@ class CreateQuery
     private function strip_backticks()
     {
         $this->_query = str_replace('`', '', $this->_query);
+
         foreach ($this->index_queries as &$query) {
             $query = str_replace('`', '', $query);
         }

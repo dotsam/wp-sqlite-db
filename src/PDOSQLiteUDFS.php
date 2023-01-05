@@ -94,43 +94,37 @@ class PDOSQLiteUDFS
     /**
      * Method to extract the month value from the date.
      *
-     * @param string representing the date formatted as 0000-00-00.
+     * @param string $field representing the date formatted as 0000-00-00.
      *
      * @return string representing the number of the month between 1 and 12.
      */
     public function month($field)
     {
-        $t = strtotime($field);
-
-        return date('n', $t);
+        return gmdate('n', strtotime($field));
     }
 
     /**
      * Method to extract the year value from the date.
      *
-     * @param string representing the date formatted as 0000-00-00.
+     * @param string $field representing the date formatted as 0000-00-00.
      *
      * @return string representing the number of the year.
      */
     public function year($field)
     {
-        $t = strtotime($field);
-
-        return date('Y', $t);
+        return gmdate('Y', strtotime($field));
     }
 
     /**
      * Method to extract the day value from the date.
      *
-     * @param string representing the date formatted as 0000-00-00.
+     * @param string $field representing the date formatted as 0000-00-00.
      *
      * @return string representing the number of the day of the month from 1 and 31.
      */
     public function day($field)
     {
-        $t = strtotime($field);
-
-        return date('j', $t);
+        return gmdate('j', strtotime($field));
     }
 
     /**
@@ -140,7 +134,7 @@ class PDOSQLiteUDFS
      * from '1970-01-01 00:00:00' GMT). Used with the argument, it changes the value
      * to the timestamp.
      *
-     * @param string representing the date formatted as '0000-00-00 00:00:00'.
+     * @param string $field representing the date formatted as '0000-00-00 00:00:00'.
      *
      * @return number of unsigned integer
      */
@@ -152,41 +146,37 @@ class PDOSQLiteUDFS
     /**
      * Method to emulate MySQL SECOND() function.
      *
-     * @param string representing the time formatted as '00:00:00'.
+     * @param string $field representing the time formatted as '00:00:00'.
      *
      * @return number of unsigned integer
      */
     public function second($field)
     {
-        $t = strtotime($field);
-
-        return intval(date("s", $t));
+        return intval(gmdate('s', strtotime($field)));
     }
 
     /**
      * Method to emulate MySQL MINUTE() function.
      *
-     * @param string representing the time formatted as '00:00:00'.
+     * @param string $field representing the time formatted as '00:00:00'.
      *
      * @return number of unsigned integer
      */
     public function minute($field)
     {
-        $t = strtotime($field);
-
-        return intval(date("i", $t));
+        return intval(gmdate('i', strtotime($field)));
     }
 
     /**
      * Method to emulate MySQL HOUR() function.
      *
-     * @param string representing the time formatted as '00:00:00'.
+     * @param string $field representing the time formatted as '00:00:00'.
      *
      * @return number
      */
-    public function hour($time)
+    public function hour($field)
     {
-        list($hours) = explode(":", $time);
+        list($hours) = explode(":", $field);
 
         return intval($hours);
     }
@@ -194,15 +184,15 @@ class PDOSQLiteUDFS
     /**
      * Method to emulate MySQL FROM_UNIXTIME() function.
      *
-     * @param integer of unix timestamp
-     * @param string to indicate the way of formatting(optional)
+     * @param integer $field of unix timestamp
+     * @param string|null $format to indicate the way of formatting(optional)
      *
      * @return string formatted as '0000-00-00 00:00:00'.
      */
     public function from_unixtime($field, $format = null)
     {
         //convert to ISO time
-        $date = date("Y-m-d H:i:s", $field);
+        $date = gmdate("Y-m-d H:i:s", $field);
 
         return is_null($format) ? $date : $this->dateformat($date, $format);
     }
@@ -214,7 +204,7 @@ class PDOSQLiteUDFS
      */
     public function now()
     {
-        return date("Y-m-d H:i:s");
+        return gmdate("Y-m-d H:i:s");
     }
 
     /**
@@ -224,13 +214,13 @@ class PDOSQLiteUDFS
      */
     public function curdate()
     {
-        return date("Y-m-d");
+        return gmdate("Y-m-d");
     }
 
     /**
      * Method to emulate MySQL CHAR_LENGTH() function.
      *
-     * @param string
+     * @param string $field
      *
      * @return int unsigned integer for the length of the argument.
      */
@@ -242,7 +232,7 @@ class PDOSQLiteUDFS
     /**
      * Method to emulate MySQL MD5() function.
      *
-     * @param string
+     * @param string $field
      *
      * @return string of the md5 hash value of the argument.
      */
@@ -288,7 +278,7 @@ class PDOSQLiteUDFS
     /**
      * Method to emulate MySQL DATEFORMAT() function.
      *
-     * @param string date formatted as '0000-00-00' or datetime as '0000-00-00 00:00:00'.
+     * @param string $date formatted as '0000-00-00' or datetime as '0000-00-00 00:00:00'.
      * @param string $format
      *
      * @return string formatted according to $format
@@ -327,11 +317,11 @@ class PDOSQLiteUDFS
           '%Y' => 'Y',
           '%y' => 'y',
         ];
-        $t                      = strtotime($date);
-        $format                 = strtr($format, $mysql_php_date_formats);
-        $output                 = date($format, $t);
 
-        return $output;
+        $time   = strtotime($date);
+        $format = strtr($format, $mysql_php_date_formats);
+
+        return gmdate($format, $time);
     }
 
     /**
@@ -350,24 +340,21 @@ class PDOSQLiteUDFS
     public function date_add($date, $interval)
     {
         $interval = $this->deriveInterval($interval);
+
         switch (strtolower($date)) {
             case "curdate()":
                 $objDate = new DateTime($this->curdate());
                 $objDate->add(new DateInterval($interval));
-                $formatted = $objDate->format("Y-m-d");
-                break;
+                return $objDate->format("Y-m-d");
             case "now()":
                 $objDate = new DateTime($this->now());
                 $objDate->add(new DateInterval($interval));
-                $formatted = $objDate->format("Y-m-d H:i:s");
-                break;
+                return $objDate->format("Y-m-d H:i:s");
             default:
                 $objDate = new DateTime($date);
                 $objDate->add(new DateInterval($interval));
-                $formatted = $objDate->format("Y-m-d H:i:s");
+                return $objDate->format("Y-m-d H:i:s");
         }
-
-        return $formatted;
     }
 
     /**
@@ -386,24 +373,21 @@ class PDOSQLiteUDFS
     public function date_sub($date, $interval)
     {
         $interval = $this->deriveInterval($interval);
+
         switch (strtolower($date)) {
             case "curdate()":
                 $objDate = new DateTime($this->curdate());
                 $objDate->sub(new DateInterval($interval));
-                $returnval = $objDate->format("Y-m-d");
-                break;
+                return $objDate->format("Y-m-d");
             case "now()":
                 $objDate = new DateTime($this->now());
                 $objDate->sub(new DateInterval($interval));
-                $returnval = $objDate->format("Y-m-d H:i:s");
-                break;
+                return $objDate->format("Y-m-d H:i:s");
             default:
                 $objDate = new DateTime($date);
                 $objDate->sub(new DateInterval($interval));
-                $returnval = $objDate->format("Y-m-d H:i:s");
+                return $objDate->format("Y-m-d H:i:s");
         }
-
-        return $returnval;
     }
 
     /**
@@ -419,48 +403,31 @@ class PDOSQLiteUDFS
     {
         $interval = trim(substr(trim($interval), 8));
         $parts    = explode(' ', $interval);
+        $_parts = [];
+
         foreach ($parts as $part) {
             if (!empty($part)) {
                 $_parts[] = $part;
             }
         }
+
         $type = strtolower(end($_parts));
+
         switch ($type) {
             case "second":
-                $unit = 'S';
-
-                return 'PT' . $_parts[0] . $unit;
-                break;
+                return 'PT' . $_parts[0] . 'S';
             case "minute":
-                $unit = 'M';
-
-                return 'PT' . $_parts[0] . $unit;
-                break;
+                return 'PT' . $_parts[0] . 'M';
             case "hour":
-                $unit = 'H';
-
-                return 'PT' . $_parts[0] . $unit;
-                break;
+                return 'PT' . $_parts[0] . 'H';
             case "day":
-                $unit = 'D';
-
-                return 'P' . $_parts[0] . $unit;
-                break;
+                return 'P' . $_parts[0] . 'D';
             case "week":
-                $unit = 'W';
-
-                return 'P' . $_parts[0] . $unit;
-                break;
+                return 'P' . $_parts[0] . 'W';
             case "month":
-                $unit = 'M';
-
-                return 'P' . $_parts[0] . $unit;
-                break;
+                return 'P' . $_parts[0] . 'M';
             case "year":
-                $unit = 'Y';
-
-                return 'P' . $_parts[0] . $unit;
-                break;
+                return 'P' . $_parts[0] . 'Y';
             case "minute_second":
                 list($minutes, $seconds) = explode(':', $_parts[0]);
 
@@ -504,7 +471,7 @@ class PDOSQLiteUDFS
      */
     public function date($date)
     {
-        return date("Y-m-d", strtotime($date));
+        return gmdate("Y-m-d", strtotime($date));
     }
 
     /**
@@ -512,7 +479,7 @@ class PDOSQLiteUDFS
      *
      * This function returns true if the argument is null, and true if not.
      *
-     * @param mixed types $field
+     * @param mixed $field
      *
      * @return boolean
      */
@@ -559,15 +526,16 @@ class PDOSQLiteUDFS
      * SQLite does have CONCAT() function, but it has a different syntax from MySQL.
      * So this function must be manipulated here.
      *
-     * @param string
+     * @param string... variable
      *
      * @return NULL if the argument is null | string concatenated if the argument is given.
      */
     public function concat()
     {
-        $returnValue = "";
+        $returnValue = '';
         $argsNum     = func_num_args();
         $argsList    = func_get_args();
+
         for ($i = 0; $i < $argsNum; $i++) {
             if (is_null($argsList[$i])) {
                 return null;
@@ -592,18 +560,22 @@ class PDOSQLiteUDFS
     public function field()
     {
         global $wpdb;
+
         $numArgs = func_num_args();
-        if ($numArgs < 2 or is_null(func_get_arg(0))) {
+
+        if ($numArgs < 2 || is_null(func_get_arg(0))) {
             return 0;
-        } else {
-            $arg_list = func_get_args();
         }
+
+        $arg_list = func_get_args();
         $searchString = array_shift($arg_list);
         $str_to_check = substr($searchString, 0, strpos($searchString, '.'));
         $str_to_check = str_replace($wpdb->prefix, '', $str_to_check);
+
         if ($str_to_check && in_array(trim($str_to_check), $wpdb->tables)) {
             return 0;
         }
+
         for ($i = 0; $i < $numArgs - 1; $i++) {
             if ($searchString === strtolower($arg_list[$i])) {
                 return $i + 1;
@@ -632,23 +604,26 @@ class PDOSQLiteUDFS
      * @param integer representing the base of the logarithm, which is optional.
      * @param double value to turn into logarithm.
      *
-     * @return double | NULL
+     * @return double|NULL
      */
     public function log()
     {
         $numArgs = func_num_args();
+
         if ($numArgs == 1) {
             $arg1 = func_get_arg(0);
 
             return log($arg1);
-        } elseif ($numArgs == 2) {
+        }
+
+        if ($numArgs == 2) {
             $arg1 = func_get_arg(0);
             $arg2 = func_get_arg(1);
 
             return log($arg1) / log($arg2);
-        } else {
-            return null;
         }
+
+        return null;
     }
 
     /**
@@ -714,7 +689,7 @@ class PDOSQLiteUDFS
      * This is MySQL alias for upper() function. This function rewrites it
      * to SQLite compatible name upper().
      *
-     * @param string
+     * @param string $string
      *
      * @return string SQLite compatible function name.
      */
@@ -729,7 +704,7 @@ class PDOSQLiteUDFS
      * This is MySQL alias for lower() function. This function rewrites it
      * to SQLite compatible name lower().
      *
-     * @param string
+     * @param string $string
      *
      * @return string SQLite compatible function name.
      */
@@ -743,7 +718,7 @@ class PDOSQLiteUDFS
      *
      * This function gets 4 or 8 bytes integer and turn it into the network address.
      *
-     * @param int long integer
+     * @param int|long $num
      *
      * @return string
      */
@@ -757,7 +732,7 @@ class PDOSQLiteUDFS
      *
      * This function gets the network address and turns it into integer.
      *
-     * @param string
+     * @param string $addr
      *
      * @return int long integer
      */
@@ -771,8 +746,8 @@ class PDOSQLiteUDFS
      *
      * This function compares two dates value and returns the difference.
      *
-     * @param string start
-     * @param string end
+     * @param string $start
+     * @param string $end
      *
      * @return string
      */
@@ -792,9 +767,9 @@ class PDOSQLiteUDFS
      * it returns 0. If mbstring extension is loaded, mb_strpos() function is
      * used.
      *
-     * @param string needle
-     * @param string haystack
-     * @param integer position
+     * @param string $substr
+     * @param string $str
+     * @param integer $pos
      *
      * @return integer
      */
@@ -803,16 +778,16 @@ class PDOSQLiteUDFS
         if (!extension_loaded('mbstring')) {
             if (($val = strpos($str, $substr, $pos)) !== false) {
                 return $val + 1;
-            } else {
-                return 0;
             }
-        } else {
-            if (($val = mb_strpos($str, $substr, $pos)) !== false) {
-                return $val + 1;
-            } else {
-                return 0;
-            }
+
+            return 0;
         }
+
+        if (($val = mb_strpos($str, $substr, $pos)) !== false) {
+            return $val + 1;
+        }
+
+        return 0;
     }
 
     /**

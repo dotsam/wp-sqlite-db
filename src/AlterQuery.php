@@ -13,19 +13,62 @@ class AlterQuery
     public $_query = null;
 
     /**
+     * Variable to store the data definition table.
+     *
+     * @var    array
+     * @access private
+     */
+    private $array_types = [
+        'bit'        => 'INTEGER',
+        'bool'       => 'INTEGER',
+        'boolean'    => 'INTEGER',
+        'tinyint'    => 'INTEGER',
+        'smallint'   => 'INTEGER',
+        'mediumint'  => 'INTEGER',
+        'bigint'     => 'INTEGER',
+        'integer'    => 'INTEGER',
+        'int'        => 'INTEGER',
+        'float'      => 'REAL',
+        'double'     => 'REAL',
+        'decimal'    => 'REAL',
+        'dec'        => 'REAL',
+        'numeric'    => 'REAL',
+        'fixed'      => 'REAL',
+        'datetime'   => 'TEXT',
+        'date'       => 'TEXT',
+        'timestamp'  => 'TEXT',
+        'time'       => 'TEXT',
+        'year'       => 'TEXT',
+        'varchar'    => 'TEXT',
+        'char'       => 'TEXT',
+        'varbinary'  => 'BLOB',
+        'binary'     => 'BLOB',
+        'tinyblob'   => 'BLOB',
+        'mediumblob' => 'BLOB',
+        'longblob'   => 'BLOB',
+        'blob'       => 'BLOB',
+        'tinytext'   => 'TEXT',
+        'mediumtext' => 'TEXT',
+        'longtext'   => 'TEXT',
+        'text'       => 'TEXT',
+      ];
+
+    /**
      * Function to split the query string to the tokens and call appropriate functions.
      *
-     * @param $query
+     * @param string $query
      * @param string $query_type
      *
-     * @return boolean | string
+     * @return string
      */
     public function rewrite_query($query, $query_type)
     {
         if (stripos($query, $query_type) === false) {
             return false;
         }
+
         $query = str_replace('`', '', $query);
+
         if (preg_match('/^\\s*(ALTER\\s*TABLE)\\s*(\\w+)?\\s*/ims', $query, $match)) {
             $tmp_query                = [];
             $re_command               = '';
@@ -35,19 +78,23 @@ class AlterQuery
             $command_array            = explode(',', $command);
 
             $single_command = array_shift($command_array);
+
             if (!empty($command_array)) {
                 $re_command = "ALTER TABLE {$tmp_tokens['table_name']} ";
                 $re_command .= implode(',', $command_array);
             }
+
             $command_tokens = $this->command_tokenizer($single_command);
-            if (!empty($command_tokens)) {
-                $tokens = array_merge($tmp_tokens, $command_tokens);
-            } else {
+
+            if (empty($command_tokens)) {
                 $this->_query = 'SELECT 1=1';
 
                 return $this->_query;
             }
+
+            $tokens = array_merge($tmp_tokens, $command_tokens);
             $command_name = strtolower($tokens['command']);
+
             switch ($command_name) {
                 case 'add column':
                 case 'rename to':
@@ -73,11 +120,13 @@ class AlterQuery
                 default:
                     break;
             }
+
             if (!is_array($tmp_query)) {
                 $this->_query[] = $tmp_query;
             } else {
                 $this->_query = $tmp_query;
             }
+
             if ($re_command != '') {
                 $this->_query = array_merge($this->_query, ['recursion' => $re_command]);
             }
@@ -99,16 +148,19 @@ class AlterQuery
     private function command_tokenizer($command)
     {
         $tokens = [];
-        if (preg_match(
-            '/^(ADD|DROP|RENAME|MODIFY|CHANGE|ALTER)\\s*(\\w+)?\\s*(\\w+(\(.+\)|))?\\s*/ims',
-            $command,
-            $match
-        )
+
+        if (
+            preg_match(
+                '/^(ADD|DROP|RENAME|MODIFY|CHANGE|ALTER)\\s*(\\w+)?\\s*(\\w+(\(.+\)|))?\\s*/ims',
+                $command,
+                $match
+            )
         ) {
             $the_rest = str_ireplace($match[0], '', $command);
             $match_1  = trim($match[1]);
             $match_2  = trim($match[2]);
             $match_3  = isset($match[3]) ? trim($match[3]) : '';
+
             switch (strtolower($match_1)) {
                 case 'add':
                     if (in_array(strtolower($match_2), ['fulltext', 'constraint', 'foreign'])) {
@@ -133,7 +185,7 @@ class AlterQuery
                         $tokens['column_name'] = '(' . trim($col_name) . ')';
                     } elseif (in_array(strtolower($match_2), ['index', 'key'])) {
                         $tokens['command'] = $match_1 . ' ' . $match_2;
-                        if ($match_3 == '') {
+                        if ($match_3 === '') {
                             $tokens['index_name'] = str_replace(['(', ')'], '', $the_rest);
                         } else {
                             $tokens['index_name'] = $match_3;
@@ -242,7 +294,7 @@ class AlterQuery
     /**
      * Function to handle single command.
      *
-     * @param array of string $queries
+     * @param array $queries
      *
      * @access private
      *
@@ -251,27 +303,26 @@ class AlterQuery
     private function handle_single_command($queries)
     {
         $tokenized_query = $queries;
+
         if (stripos($tokenized_query['command'], 'add column') !== false) {
             $column_def = $this->convert_field_types($tokenized_query['column_name'], $tokenized_query['column_def']);
-            $query      = "ALTER TABLE {$tokenized_query['table_name']} ADD COLUMN {$tokenized_query['column_name']} $column_def";
+            return "ALTER TABLE {$tokenized_query['table_name']} ADD COLUMN {$tokenized_query['column_name']} $column_def";
         } elseif (stripos($tokenized_query['command'], 'rename') !== false) {
-            $query = "ALTER TABLE {$tokenized_query['table_name']} RENAME TO {$tokenized_query['column_name']}";
+            return "ALTER TABLE {$tokenized_query['table_name']} RENAME TO {$tokenized_query['column_name']}";
         } elseif (stripos($tokenized_query['command'], 'add index') !== false) {
             $unique = isset($tokenized_query['unique']) ? 'UNIQUE' : '';
-            $query  = "CREATE $unique INDEX IF NOT EXISTS {$tokenized_query['index_name']} ON {$tokenized_query['table_name']} {$tokenized_query['column_name']}";
+            return "CREATE $unique INDEX IF NOT EXISTS {$tokenized_query['index_name']} ON {$tokenized_query['table_name']} {$tokenized_query['column_name']}";
         } elseif (stripos($tokenized_query['command'], 'drop index') !== false) {
-            $query = "DROP INDEX IF EXISTS {$tokenized_query['index_name']}";
-        } else {
-            $query = 'SELECT 1=1';
+            return "DROP INDEX IF EXISTS {$tokenized_query['index_name']}";
         }
 
-        return $query;
+        return 'SELECT 1=1';
     }
 
     /**
      * Function to handle ADD PRIMARY KEY.
      *
-     * @param array of string $queries
+     * @param array $queries
      *
      * @access private
      *
@@ -282,20 +333,25 @@ class AlterQuery
         $tokenized_query = $queries;
         $tbl_name        = $tokenized_query['table_name'];
         $temp_table      = 'temp_' . $tokenized_query['table_name'];
-        $_wpdb           = new wpsqlitedb();
-        $query_obj       = $_wpdb->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='$tbl_name'");
-        $_wpdb           = null;
+
+        $query_obj = (new wpsqlitedb())->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='$tbl_name'");
+
         for ($i = 0; $i < count($query_obj); $i++) {
             $index_queries[$i] = $query_obj[$i]->sql;
         }
+
         $table_query = array_shift($index_queries);
-        $table_query = str_replace($tokenized_query['table_name'], $temp_table, $table_query);
+        $table_query = str_replace($tbl_name, $temp_table, $table_query);
         $table_query = rtrim($table_query, ')');
-        $table_query = ", PRIMARY KEY {$tokenized_query['column_name']}";
-        $query[]     = $table_query;
-        $query[]     = "INSERT INTO $temp_table SELECT * FROM {$tokenized_query['table_name']}";
-        $query[]     = "DROP TABLE IF EXISTS {$tokenized_query['table_name']}";
-        $query[]     = "ALTER TABLE $temp_table RENAME TO {$tokenized_query['table_name']}";
+        $table_query .= ", PRIMARY KEY {$tokenized_query['column_name']})";
+
+        $query = [
+            $table_query,
+            "INSERT INTO $temp_table SELECT * FROM $tbl_name",
+            "DROP TABLE IF EXISTS $tbl_name",
+            "ALTER TABLE $temp_table RENAME TO $tbl_name",
+        ];
+
         foreach ($index_queries as $index) {
             $query[] = $index;
         }
@@ -306,7 +362,7 @@ class AlterQuery
     /**
      * Function to handle DROP PRIMARY KEY.
      *
-     * @param array of string $queries
+     * @param array $queries
      *
      * @access private
      *
@@ -316,25 +372,32 @@ class AlterQuery
     {
         $tokenized_query = $queries;
         $temp_table      = 'temp_' . $tokenized_query['table_name'];
-        $_wpdb           = new wpsqlitedb();
-        $query_obj       = $_wpdb->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
-        $_wpdb           = null;
+
+        $query_obj = (new wpsqlitedb())->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
+
         for ($i = 0; $i < count($query_obj); $i++) {
             $index_queries[$i] = $query_obj[$i]->sql;
         }
+
         $table_query = array_shift($index_queries);
         $pattern1    = '/^\\s*PRIMARY\\s*KEY\\s*\(.*\)/im';
         $pattern2    = '/^\\s*.*(PRIMARY\\s*KEY\\s*(:?AUTOINCREMENT|))\\s*(?!\()/im';
+
         if (preg_match($pattern1, $table_query, $match)) {
             $table_query = str_replace($match[0], '', $table_query);
         } elseif (preg_match($pattern2, $table_query, $match)) {
             $table_query = str_replace($match[1], '', $table_query);
         }
+
         $table_query = str_replace($tokenized_query['table_name'], $temp_table, $table_query);
-        $query[]     = $table_query;
-        $query[]     = "INSERT INTO $temp_table SELECT * FROM {$tokenized_query['table_name']}";
-        $query[]     = "DROP TABLE IF EXISTS {$tokenized_query['table_name']}";
-        $query[]     = "ALTER TABLE $temp_table RENAME TO {$tokenized_query['table_name']}";
+
+        $query       = [
+            $table_query,
+            "INSERT INTO $temp_table SELECT * FROM {$tokenized_query['table_name']}",
+            "DROP TABLE IF EXISTS {$tokenized_query['table_name']}",
+            "ALTER TABLE $temp_table RENAME TO {$tokenized_query['table_name']}",
+        ];
+
         foreach ($index_queries as $index) {
             $query[] = $index;
         }
@@ -345,7 +408,7 @@ class AlterQuery
     /**
      * Function to handle MODIFY COLUMN.
      *
-     * @param array of string $queries
+     * @param array $queries
      *
      * @access private
      *
@@ -356,18 +419,22 @@ class AlterQuery
         $tokenized_query = $queries;
         $temp_table      = 'temp_' . $tokenized_query['table_name'];
         $column_def      = $this->convert_field_types($tokenized_query['column_name'], $tokenized_query['column_def']);
-        $_wpdb           = new wpsqlitedb();
-        $query_obj       = $_wpdb->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
-        $_wpdb           = null;
+
+        $query_obj = (new wpsqlitedb())->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
+
         for ($i = 0; $i < count($query_obj); $i++) {
             $index_queries[$i] = $query_obj[$i]->sql;
         }
+
         $create_query = array_shift($index_queries);
         if (stripos($create_query, $tokenized_query['column_name']) === false) {
             return 'SELECT 1=1';
-        } elseif (preg_match("/{$tokenized_query['column_name']}\\s*{$column_def}\\s*[,)]/i", $create_query)) {
+        }
+
+        if (preg_match("/{$tokenized_query['column_name']}\\s*{$column_def}\\s*[,)]/i", $create_query)) {
             return 'SELECT 1=1';
         }
+
         $create_query = preg_replace("/{$tokenized_query['table_name']}/i", $temp_table, $create_query);
         if (preg_match("/\\b{$tokenized_query['column_name']}\\s*.*(?=,)/ims", $create_query)) {
             $create_query = preg_replace(
@@ -382,10 +449,14 @@ class AlterQuery
                 $create_query
             );
         }
-        $query[] = $create_query;
-        $query[] = "INSERT INTO $temp_table SELECT * FROM {$tokenized_query['table_name']}";
-        $query[] = "DROP TABLE IF EXISTS {$tokenized_query['table_name']}";
-        $query[] = "ALTER TABLE $temp_table RENAME TO {$tokenized_query['table_name']}";
+
+        $query = [
+            $create_query,
+            "INSERT INTO $temp_table SELECT * FROM {$tokenized_query['table_name']}",
+            "DROP TABLE IF EXISTS {$tokenized_query['table_name']}",
+            "ALTER TABLE $temp_table RENAME TO {$tokenized_query['table_name']}",
+        ];
+
         foreach ($index_queries as $index) {
             $query[] = $index;
         }
@@ -396,7 +467,7 @@ class AlterQuery
     /**
      * Function to handle CHANGE COLUMN.
      *
-     * @param array of string $queries
+     * @param array $queries
      *
      * @access private
      *
@@ -408,61 +479,67 @@ class AlterQuery
         $old_fields      = '';
         $tokenized_query = $queries;
         $temp_table      = 'temp_' . $tokenized_query['table_name'];
-        if (isset($tokenized_query['new_column'])) {
-            $column_name = $tokenized_query['new_column'];
-        } else {
-            $column_name = $tokenized_query['old_column'];
-        }
+
+        $column_name = isset($tokenized_query['new_column']) ? $tokenized_query['new_column'] : $tokenized_query['old_column'];
+
         $column_def = $this->convert_field_types($column_name, $tokenized_query['column_def']);
-        $_wpdb      = new wpsqlitedb();
-        $col_obj    = $_wpdb->get_results("SHOW COLUMNS FROM {$tokenized_query['table_name']}");
+
+        $col_obj = (new wpsqlitedb())->get_results("SHOW COLUMNS FROM {$tokenized_query['table_name']}");
+
         foreach ($col_obj as $col) {
             if (stripos($col->Field, $tokenized_query['old_column']) !== false) {
                 $col_check = true;
             }
+
             $old_fields .= $col->Field . ',';
         }
-        if ($col_check == false) {
-            $_wpdb = null;
 
+        if ($col_check == false) {
             return 'SELECT 1=1';
         }
+
         $old_fields = rtrim($old_fields, ',');
         $new_fields = str_ireplace($tokenized_query['old_column'], $column_name, $old_fields);
-        $query_obj  = $_wpdb->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
-        $_wpdb      = null;
+        $query_obj  = (new wpsqlitedb())->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
+
         for ($i = 0; $i < count($query_obj); $i++) {
             $index_queries[$i] = $query_obj[$i]->sql;
         }
+
         $create_query = array_shift($index_queries);
         $create_query = preg_replace("/{$tokenized_query['table_name']}/i", $temp_table, $create_query);
+
         if (preg_match("/\\b{$tokenized_query['old_column']}\\s*(.+?)(?=,)/ims", $create_query, $match)) {
             if (stripos(trim($match[1]), $column_def) !== false) {
                 return 'SELECT 1=1';
-            } else {
-                $create_query = preg_replace(
-                    "/\\b{$tokenized_query['old_column']}\\s*.+?(?=,)/ims",
-                    "{$column_name} {$column_def}",
-                    $create_query,
-                    1
-                );
             }
+
+            $create_query = preg_replace(
+                "/\\b{$tokenized_query['old_column']}\\s*.+?(?=,)/ims",
+                "{$column_name} {$column_def}",
+                $create_query,
+                1
+            );
         } elseif (preg_match("/\\b{$tokenized_query['old_column']}\\s*(.+?)(?=\))/ims", $create_query, $match)) {
             if (stripos(trim($match[1]), $column_def) !== false) {
                 return 'SELECT 1=1';
-            } else {
-                $create_query = preg_replace(
-                    "/\\b{$tokenized_query['old_column']}\\s*.*(?=\))/ims",
-                    "{$column_name} {$column_def}",
-                    $create_query,
-                    1
-                );
             }
+
+            $create_query = preg_replace(
+                "/\\b{$tokenized_query['old_column']}\\s*.*(?=\))/ims",
+                "{$column_name} {$column_def}",
+                $create_query,
+                1
+            );
         }
-        $query[] = $create_query;
-        $query[] = "INSERT INTO $temp_table ($new_fields) SELECT $old_fields FROM {$tokenized_query['table_name']}";
-        $query[] = "DROP TABLE IF EXISTS {$tokenized_query['table_name']}";
-        $query[] = "ALTER TABLE $temp_table RENAME TO {$tokenized_query['table_name']}";
+
+        $query = [
+            $create_query,
+            "INSERT INTO $temp_table ($new_fields) SELECT $old_fields FROM {$tokenized_query['table_name']}",
+            "DROP TABLE IF EXISTS {$tokenized_query['table_name']}",
+            "ALTER TABLE $temp_table RENAME TO {$tokenized_query['table_name']}",
+        ];
+
         foreach ($index_queries as $index) {
             $query[] = $index;
         }
@@ -473,7 +550,7 @@ class AlterQuery
     /**
      * Function to handle ALTER COLUMN.
      *
-     * @param array of string $queries
+     * @param array $queries
      *
      * @access private
      *
@@ -483,27 +560,30 @@ class AlterQuery
     {
         $tokenized_query = $queries;
         $temp_table      = 'temp_' . $tokenized_query['table_name'];
+        $def_value = null;
+
         if (isset($tokenized_query['default_value'])) {
             $def_value = $this->convert_field_types($tokenized_query['column_name'], $tokenized_query['default_value']);
             $def_value = 'DEFAULT ' . $def_value;
-        } else {
-            $def_value = null;
         }
-        $_wpdb     = new wpsqlitedb();
-        $query_obj = $_wpdb->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
-        $_wpdb     = null;
+
+        $query_obj = (new wpsqlitedb())->get_results("SELECT sql FROM sqlite_master WHERE tbl_name='{$tokenized_query['table_name']}'");
+
         for ($i = 0; $i < count($query_obj); $i++) {
             $index_queries[$i] = $query_obj[$i]->sql;
         }
+
         $create_query = array_shift($index_queries);
         if (stripos($create_query, $tokenized_query['column_name']) === false) {
             return 'SELECT 1=1';
         }
-        if (preg_match(
-            "/\\s*({$tokenized_query['column_name']})\\s*(.*)?(DEFAULT\\s*.*)[,)]/im",
-            $create_query,
-            $match
-        )
+
+        if (
+            preg_match(
+                "/\\s*({$tokenized_query['column_name']})\\s*(.*)?(DEFAULT\\s*.*)[,)]/im",
+                $create_query,
+                $match
+            )
         ) {
             $col_name        = trim($match[1]);
             $col_def         = trim($match[2]);
@@ -511,11 +591,9 @@ class AlterQuery
             $checked_col_def = $this->convert_field_types($col_name, $col_def);
             $old_default     = trim($match[3]);
             $pattern         = "/$col_name\\s*$col_def_esc\\s*$old_default/im";
-            if (is_null($def_value)) {
-                $replacement = $col_name . ' ' . $checked_col_def;
-            } else {
-                $replacement = $col_name . ' ' . $checked_col_def . ' ' . $def_value;
-            }
+
+            $replacement = is_null($def_value) ? $col_name . ' ' . $checked_col_def : $col_name . ' ' . $checked_col_def . ' ' . $def_value;
+
             $create_query = preg_replace($pattern, $replacement, $create_query);
             $create_query = str_ireplace($tokenized_query['table_name'], $temp_table, $create_query);
         } elseif (preg_match("/\\s*({$tokenized_query['column_name']})\\s*(.*)?[,)]/im", $create_query, $match)) {
@@ -524,20 +602,22 @@ class AlterQuery
             $col_def_esc     = str_replace(['(', ')'], ['\(', '\)'], $col_def);
             $checked_col_def = $this->convert_field_types($col_name, $col_def);
             $pattern         = "/$col_name\\s*$col_def_esc/im";
-            if (is_null($def_value)) {
-                $replacement = $col_name . ' ' . $checked_col_def;
-            } else {
-                $replacement = $col_name . ' ' . $checked_col_def . ' ' . $def_value;
-            }
+
+            $replacement = is_null($def_value) ? $col_name . ' ' . $checked_col_def : $col_name . ' ' . $checked_col_def . ' ' . $def_value;
+
             $create_query = preg_replace($pattern, $replacement, $create_query);
             $create_query = str_ireplace($tokenized_query['table_name'], $temp_table, $create_query);
         } else {
             return 'SELECT 1=1';
         }
-        $query[] = $create_query;
-        $query[] = "INSERT INTO $temp_table SELECT * FROM {$tokenized_query['table_name']}";
-        $query[] = "DROP TABLE IF EXISTS {$tokenized_query['table_name']}";
-        $query[] = "ALTER TABLE $temp_table RENAME TO {$tokenized_query['table_name']}";
+
+        $query = [
+            $create_query,
+            "INSERT INTO $temp_table SELECT * FROM {$tokenized_query['table_name']}",
+            "DROP TABLE IF EXISTS {$tokenized_query['table_name']}",
+            "ALTER TABLE $temp_table RENAME TO {$tokenized_query['table_name']}",
+        ];
+
         foreach ($index_queries as $index) {
             $query[] = $index;
         }
@@ -560,6 +640,7 @@ class AlterQuery
         $array_curtime = ['current_timestamp', 'current_time', 'current_date'];
         $array_reptime = ["'0000-00-00 00:00:00'", "'0000-00-00 00:00:00'", "'0000-00-00'"];
         $def_string    = str_replace('`', '', $col_def);
+
         foreach ($this->array_types as $o => $r) {
             $pattern = "/\\b$o\\s*(\([^\)]*\)*)?\\s*/ims";
             if (preg_match($pattern, $def_string)) {
@@ -567,6 +648,7 @@ class AlterQuery
                 break;
             }
         }
+
         $def_string = preg_replace('/unsigned/im', '', $def_string);
         $def_string = preg_replace('/auto_increment/im', 'PRIMARY KEY AUTOINCREMENT', $def_string);
         // when you use ALTER TABLE ADD, you can't use current_*. so we replace
@@ -579,45 +661,4 @@ class AlterQuery
 
         return $def_string;
     }
-
-    /**
-     * Variable to store the data definition table.
-     *
-     * @var    array
-     * @access private
-     */
-    private $array_types = [
-      'bit'        => 'INTEGER',
-      'bool'       => 'INTEGER',
-      'boolean'    => 'INTEGER',
-      'tinyint'    => 'INTEGER',
-      'smallint'   => 'INTEGER',
-      'mediumint'  => 'INTEGER',
-      'bigint'     => 'INTEGER',
-      'integer'    => 'INTEGER',
-      'int'        => 'INTEGER',
-      'float'      => 'REAL',
-      'double'     => 'REAL',
-      'decimal'    => 'REAL',
-      'dec'        => 'REAL',
-      'numeric'    => 'REAL',
-      'fixed'      => 'REAL',
-      'datetime'   => 'TEXT',
-      'date'       => 'TEXT',
-      'timestamp'  => 'TEXT',
-      'time'       => 'TEXT',
-      'year'       => 'TEXT',
-      'varchar'    => 'TEXT',
-      'char'       => 'TEXT',
-      'varbinary'  => 'BLOB',
-      'binary'     => 'BLOB',
-      'tinyblob'   => 'BLOB',
-      'mediumblob' => 'BLOB',
-      'longblob'   => 'BLOB',
-      'blob'       => 'BLOB',
-      'tinytext'   => 'TEXT',
-      'mediumtext' => 'TEXT',
-      'longtext'   => 'TEXT',
-      'text'       => 'TEXT',
-    ];
 }
