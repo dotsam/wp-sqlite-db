@@ -7,7 +7,7 @@ namespace WP_SQLite_DB;
 /**
  * This class is for rewriting various query string except CREATE and ALTER.
  */
-class PDOSQLiteDriver
+class QueryRewriter
 {
     /**
      * Variable to indicate the query types.
@@ -333,7 +333,7 @@ class PDOSQLiteDriver
      */
     private function handle_create_query()
     {
-        $this->_query = (new CreateQuery())->rewrite_query($this->_query);
+        $this->_query = (new QueryRewriterCreate())->rewrite_query($this->_query);
     }
 
     /**
@@ -346,7 +346,7 @@ class PDOSQLiteDriver
      */
     private function handle_alter_query()
     {
-        $this->_query = (new AlterQuery())->rewrite_query($this->_query);
+        $this->_query = (new QueryRewriterAlter())->rewrite_query($this->_query);
     }
 
     /**

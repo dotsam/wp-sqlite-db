@@ -7,7 +7,7 @@ namespace WP_SQLite_DB;
 /**
  * This class provides a function to rewrite CREATE query.
  */
-class CreateQuery
+class QueryRewriterCreate
 {
     /**
      * The query string to be rewritten in this class.

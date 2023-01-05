@@ -3,7 +3,7 @@
 namespace WP_SQLite_DB;
 
 // phpcs:disable PSR1.Methods.CamelCapsMethodName.NotCamelCaps
-class AlterQuery
+class QueryRewriterAlter
 {
     /**
      * Variable to store the rewritten query string.

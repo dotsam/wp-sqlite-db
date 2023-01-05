@@ -2,11 +2,11 @@
 
 use ClassPreloader\ClassLoader;
 use ClassPreloader\ClassLoader\Config;
-use WP_SQLite_DB\AlterQuery;
-use WP_SQLite_DB\CreateQuery;
 use WP_SQLite_DB\ObjectArray;
 use WP_SQLite_DB\PDOEngine;
-use WP_SQLite_DB\PDOSQLiteDriver;
+use WP_SQLite_DB\QueryRewriter;
+use WP_SQLite_DB\QueryRewriterAlter;
+use WP_SQLite_DB\QueryRewriterCreate;
 use WP_SQLite_DB\wpsqlitedb;
 
 $config = new Config();
@@ -24,9 +24,9 @@ call_user_func(function (ClassLoader $loader) {
     define('FQDB', '');
     define('FQDBDIR', dirname(__DIR__) . '/tests/test-wp-content/');
     new PDOEngine();
-    new PDOSQLiteDriver();
-    new CreateQuery();
-    new AlterQuery();
+    new QueryRewriter();
+    new QueryRewriterCreate();
+    new QueryRewriterAlter();
     new ObjectArray([]);
     new WP_SQLite_DB__Main();
 }, $loader);

@@ -183,7 +183,7 @@ class PDOEngine extends PDO
     /**
      * The rewrite engine
      *
-     * @var PDOSQLiteDriver
+     * @var QueryRewriter
      */
     private $rewrite_engine;
 
@@ -206,7 +206,7 @@ class PDOEngine extends PDO
             $this->prepare_directory();
         }
 
-        $this->rewrite_engine = new PDOSQLiteDriver();
+        $this->rewrite_engine = new QueryRewriter();
 
         if (isset($GLOBALS['@pdo'])) {
             $this->pdo = $GLOBALS['@pdo'];
