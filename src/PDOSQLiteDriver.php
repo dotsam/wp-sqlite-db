@@ -14,14 +14,14 @@ class PDOSQLiteDriver
      *
      * @var string $query_type
      */
-    public $query_type = '';
+    private $query_type = '';
 
     /**
      * Variable to store query string.
      *
      * @var string
      */
-    public $_query = '';
+    private $_query = '';
 
     /**
      * Variable to check if rewriting CALC_FOUND_ROWS is needed.
@@ -333,9 +333,7 @@ class PDOSQLiteDriver
      */
     private function handle_create_query()
     {
-        $engine       = new CreateQuery();
-        $this->_query = $engine->rewrite_query($this->_query);
-        $engine       = null;
+        $this->_query = (new CreateQuery())->rewrite_query($this->_query);
     }
 
     /**
@@ -348,9 +346,7 @@ class PDOSQLiteDriver
      */
     private function handle_alter_query()
     {
-        $engine       = new AlterQuery();
-        $this->_query = $engine->rewrite_query($this->_query, 'alter');
-        $engine       = null;
+        $this->_query = (new AlterQuery())->rewrite_query($this->_query);
     }
 
     /**

@@ -181,6 +181,13 @@ class PDOEngine extends PDO
     protected $has_active_transaction = false;
 
     /**
+     * The rewrite engine
+     *
+     * @var PDOSQLiteDriver
+     */
+    private $rewrite_engine;
+
+    /**
      * Constructor
      *
      * Create PDO object, set user defined functions and initialize other settings.
@@ -198,6 +205,8 @@ class PDOEngine extends PDO
         if (!is_file(FQDB)) {
             $this->prepare_directory();
         }
+
+        $this->rewrite_engine = new PDOSQLiteDriver();
 
         if (isset($GLOBALS['@pdo'])) {
             $this->pdo = $GLOBALS['@pdo'];
@@ -433,8 +442,7 @@ class PDOEngine extends PDO
                 }
                 break;
             default:
-                $engine                = $this->prepare_engine($this->query_type);
-                $this->rewritten_query = $engine->rewrite_query($statement, $this->query_type);
+                $this->rewritten_query = $this->rewrite_engine->rewrite_query($statement, $this->query_type);
 
                 if (!is_null($this->pre_ordered_results)) {
                     $this->results             = $this->pre_ordered_results;
@@ -449,7 +457,7 @@ class PDOEngine extends PDO
                 $this->execute_query($prepared_query);
 
                 if (!$this->is_error) {
-                    $this->process_results($engine);
+                    $this->process_results();
                 }
                 break;
         }
@@ -660,24 +668,6 @@ class PDOEngine extends PDO
         $this->is_error            = false;
         $this->queries             = [];
         $this->param_num           = 0;
-    }
-
-    /**
-     * Method to include the apropreate class files.
-     *
-     * @param string $query_type
-     *
-     * @return CreateQuery|AlterQuery|PDOSQLiteDriver reference to apropreate driver
-     */
-    private function prepare_engine($query_type = null)
-    {
-        if (stripos($query_type, 'create') !== false) {
-            return new CreateQuery();
-        } elseif (stripos($query_type, 'alter') !== false) {
-            return new AlterQuery();
-        }
-
-        return new PDOSQLiteDriver();
     }
 
     /**
@@ -948,8 +938,7 @@ class PDOEngine extends PDO
      */
     private function execute_insert_query_new($query)
     {
-        $engine                = $this->prepare_engine($this->query_type);
-        $this->rewritten_query = $engine->rewrite_query($query, $this->query_type);
+        $this->rewritten_query = $this->rewrite_engine->rewrite_query($query, $this->query_type);
         $this->queries[]       = "Rewritten:\n{$this->rewritten_query}";
         $this->extract_variables();
         $statement = $this->prepare_query();
@@ -970,7 +959,6 @@ class PDOEngine extends PDO
 
         $multi_insert = false;
         $statement    = null;
-        $engine       = $this->prepare_engine($this->query_type);
 
         if (preg_match('/(INSERT.*?VALUES\\s*)(\(.*\))/imsx', $query, $matched)) {
             $query_prefix = $matched[1];
@@ -996,7 +984,7 @@ class PDOEngine extends PDO
             foreach ($exploded_parts as $value) {
                 $suffix = (substr($value, -1, 1) === ')') ? '' : ')';
                 $query_string              = "{$query_prefix} {$value}{$suffix}";
-                $this->rewritten_query     = $engine->rewrite_query($query_string, $this->query_type);
+                $this->rewritten_query     = $this->rewrite_engine->rewrite_query($query_string, $this->query_type);
                 $this->queries[]           = "Rewritten:\n{$this->rewritten_query}";
                 $this->extracted_variables = [];
                 $this->extract_variables();
@@ -1009,7 +997,7 @@ class PDOEngine extends PDO
                 $this->execute_query($statement);
             }
         } else {
-            $this->rewritten_query = $engine->rewrite_query($query, $this->query_type);
+            $this->rewritten_query = $this->rewrite_engine->rewrite_query($query, $this->query_type);
             $this->queries[]       = "Rewritten:\n{$this->rewritten_query}";
             $this->extract_variables();
             $statement = $this->prepare_query();
@@ -1069,8 +1057,7 @@ class PDOEngine extends PDO
      */
     private function execute_create_query($query)
     {
-        $engine          = $this->prepare_engine($this->query_type);
-        $rewritten_query = $engine->rewrite_query($query);
+        $rewritten_query = $this->rewrite_engine->rewrite_query($query, $this->query_type);
         $reason          = 0;
         $message         = '';
 
@@ -1107,11 +1094,10 @@ class PDOEngine extends PDO
      */
     private function execute_alter_query($query)
     {
-        $engine          = $this->prepare_engine($this->query_type);
         $reason          = 0;
         $message         = '';
         $re_query        = '';
-        $rewritten_query = $engine->rewrite_query($query, $this->query_type);
+        $rewritten_query = $this->rewrite_engine->rewrite_query($query, $this->query_type);
 
         if (is_array($rewritten_query) && array_key_exists('recursion', $rewritten_query)) {
             $re_query = $rewritten_query['recursion'];
@@ -1234,10 +1220,8 @@ class PDOEngine extends PDO
 
     /**
      * Method to format the queried data to that of MySQL.
-     *
-     * @param string $engine
      */
-    private function process_results($engine)
+    private function process_results()
     {
         if (in_array($this->query_type, ['describe', 'desc', 'showcolumns'], true)) {
             $this->convert_to_columns_object();

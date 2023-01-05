@@ -10,7 +10,7 @@ class AlterQuery
      *
      * @var string
      */
-    public $_query = null;
+    private $_query = null;
 
     /**
      * Variable to store the data definition table.
@@ -61,12 +61,8 @@ class AlterQuery
      *
      * @return string
      */
-    public function rewrite_query($query, $query_type)
+    public function rewrite_query($query)
     {
-        if (stripos($query, $query_type) === false) {
-            return false;
-        }
-
         $query = str_replace('`', '', $query);
 
         if (preg_match('/^\\s*(ALTER\\s*TABLE)\\s*(\\w+)?\\s*/ims', $query, $match)) {
