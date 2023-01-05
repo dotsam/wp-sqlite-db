@@ -255,16 +255,15 @@ class QueryRewriter
         if (!$this->rewrite_calc_found) {
             return;
         }
+
         global $wpdb;
+
         // first strip the code. this is the end of rewriting process
         $this->_query = str_ireplace('SQL_CALC_FOUND_ROWS', '', $this->_query);
         // we make the data for next SELECE FOUND_ROWS() statement
         $unlimited_query = preg_replace('/\\bLIMIT\\s*.*/imsx', '', $this->_query);
-        //$unlimited_query = preg_replace('/\\bGROUP\\s*BY\\s*.*/imsx', '', $unlimited_query);
-        // we no longer use SELECT COUNT query
-        //$unlimited_query = $this->_transform_to_count($unlimited_query);
-        $result                       = (new wpsqlitedb())->query($unlimited_query);
-        $wpdb->dbh->found_rows_result = $result;
+
+        $wpdb->dbh->found_rows_result = (new wpsqlitedb())->query($unlimited_query);
     }
 
     /**
@@ -748,13 +747,12 @@ class QueryRewriter
     }
 
     /**
-     * Method to avoid DELETE with JOIN statement.
+     * Method to avoid multi-table DELETE statement.
      *
-     * The file wp-admin/includes/upgrade.php contains 'DELETE ... JOIN' statement
-     * This query can't be replaced with regular expression or udf, so we
-     * replace all the statement with another. But this query was used in
-     * the very old version of WordPress when it was upgraded. So we won't
-     * have no chance that this method should be used.
+     * There is one database migration from versions older than 2.9 and the
+     * function `delete_expired_transients` that use `DELETE` statements, not
+     * `DELETE FROM`. There's no easy direct replacement for this query format,
+     * so below are some custom replacements/workarounds.
      *
      * @access private
      */
@@ -762,26 +760,63 @@ class QueryRewriter
     {
         global $wpdb;
 
-        $ids_to_delete = [];
+        // For upgrades from versions prior to 2.9
+        if (stripos($this->_query, "DELETE o1 FROM $wpdb->options AS o1 JOIN $wpdb->options AS o2") !== false) {
+            $this->_query = "DELETE FROM $wpdb->options WHERE option_id IN (SELECT MIN(option_id) FROM $wpdb->options GROUP BY option_name HAVING COUNT(*) > 1)";
+            return;
+        }
 
-        $pattern   = "DELETE o1 FROM $wpdb->options AS o1 JOIN $wpdb->options AS o2";
-        $pattern2  = "DELETE a, b FROM $wpdb->sitemeta AS a, $wpdb->sitemeta AS b";
-        $rewritten = "DELETE FROM $wpdb->options WHERE option_id IN (SELECT MIN(option_id) FROM $wpdb->options GROUP BY option_name HAVING COUNT(*) > 1)";
+        // For calls to `delete_expired_transients()`
+        if (preg_match("/DELETE a, b FROM (\w+).*? LIKE '(\w+)%'.*? < (\d+).*?/ism", $this->_query, $matches)) {
+            $ids_to_delete = [];
+            $map = [
+                'options' => [
+                    'id' => 'option_id',
+                    'key' => 'option_name',
+                    'value' => 'option_value',
+                ],
+                'sitemeta' => [
+                    'id' => 'meta_id',
+                    'key' => 'meta_key',
+                    'value' => 'meta_value',
+                ],
+            ];
 
-        if (stripos($this->_query, $pattern) !== false) {
-            $this->_query = $rewritten;
-        } elseif (stripos($this->_query, $pattern2) !== false) {
-            $time       = time();
-            $prep_query = "SELECT a.meta_id AS aid, b.meta_id AS bid FROM $wpdb->sitemeta AS a INNER JOIN $wpdb->sitemeta AS b ON a.meta_key='_site_transient_timeout_'||substr(b.meta_key, 17) WHERE b.meta_key='_site_transient_'||substr(a.meta_key, 25) AND a.meta_value < $time";
-            $ids        = (new wpsqlitedb())->get_results($prep_query);
+            $table = $matches[1];
+            $table_type = ($table === $wpdb->options) ? 'options' : 'sitemeta';
+            $transient_type = $matches[2];
+            $time = $matches[3];
+
+            $prep_query = sprintf(
+                'SELECT a.%1$s AS aid, b.%1$s AS bid
+                FROM %2$s AS a
+                INNER JOIN %2$s AS b
+                ON a.%3$s=\'%4$s\'||substr(b.%3$s, %5$d)
+                WHERE b.%3$s=\'%6$s\'||substr(a.%3$s, %7$d) AND a.%8$s < %9$d',
+                $map[$table_type]['id'],
+                $table,
+                $map[$table_type]['key'],
+                $transient_type . 'timeout_',
+                strlen($transient_type . 'timeout_') + 1,
+                $transient_type,
+                strlen($transient_type) + 1,
+                $map[$table_type]['value'],
+                $time
+            );
+
+            $ids = (new wpsqlitedb())->get_results($prep_query);
 
             foreach ($ids as $id) {
                 $ids_to_delete[] = $id->aid;
                 $ids_to_delete[] = $id->bid;
             }
 
-            $rewritten    = "DELETE FROM $wpdb->sitemeta WHERE meta_id IN (" . implode(',', $ids_to_delete) . ")";
-            $this->_query = $rewritten;
+            if (empty($ids_to_delete)) {
+                $this->return_true();
+                return;
+            }
+
+            $this->_query = "DELETE FROM $table WHERE option_id IN (" . implode(',', $ids_to_delete) . ")";
         }
     }
 
