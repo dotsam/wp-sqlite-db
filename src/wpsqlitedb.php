@@ -293,7 +293,7 @@ class wpsqlitedb extends \wpdb
 
         if ($this->last_error = $this->dbh->get_error_message()) {
             // Clear insert_id on a subsequent failed insert.
-            if ( $this->insert_id && preg_match( '/^\s*(insert|replace)\s/i', $query ) ) {
+            if ($this->insert_id && preg_match('/^\s*(insert|replace)\s/i', $query)) {
                 $this->insert_id = 0;
             }
 
@@ -328,7 +328,8 @@ class wpsqlitedb extends \wpdb
      *
      * @param string $query The query to run.
      */
-    private function _do_query($query) {
+    private function _do_query($query)
+    {
         if (defined('SAVEQUERIES') && \SAVEQUERIES) {
             $this->timer_start();
         }
@@ -404,13 +405,13 @@ class wpsqlitedb extends \wpdb
         return '5.5';
     }
 
-      /**
-       * Retrieves full database server information.
-       *
-       * @return string|false Server info on success, false on failure.
-       */
-      public function db_server_info()
-      {
-          return 'SQLite3-' . (new PDO('sqlite::memory:'))->getAttribute(\PDO::ATTR_SERVER_VERSION);
-      }
+    /**
+     * Retrieves full database server information.
+     *
+     * @return string|false Server info on success, false on failure.
+     */
+    public function db_server_info()
+    {
+        return 'SQLite3-' . (new PDO('sqlite::memory:'))->getAttribute(\PDO::ATTR_SERVER_VERSION);
+    }
 }
